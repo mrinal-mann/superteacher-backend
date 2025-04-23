@@ -1,9 +1,27 @@
-import { ConversationStep, GradingResult } from '../types';
-import { sessionStore } from '../utils/sessionStore';
-import { ocrService } from './ocrService';
-import { openaiService } from './openaiService';
+import { ConversationStep, GradingResult, SessionData } from "../types";
+import { sessionStore } from "../utils/sessionStore";
+import { ocrService } from "./ocrService";
+import { openaiService } from "./openaiService";
 
 class ChatService {
+  /**
+   * Initialize session if needed or prepare it for image upload
+   */
+  initializeSessionIfNeeded(userId: string): SessionData {
+    const session = sessionStore.getSession(userId);
+
+    // If the session is not in WAITING_FOR_ANSWER state, initialize it with a dummy question
+    if (session.step !== ConversationStep.WAITING_FOR_ANSWER) {
+      console.log("Initializing session for image upload");
+      return sessionStore.updateSession(userId, {
+        question: "Auto-generated question for image upload",
+        step: ConversationStep.WAITING_FOR_ANSWER,
+      });
+    }
+
+    return session;
+  }
+
   /**
    * Process a text message from the teacher
    */
@@ -14,19 +32,19 @@ class ChatService {
     switch (session.step) {
       case ConversationStep.WAITING_FOR_QUESTION:
         return this.handleQuestionInput(userId, message);
-      
+
       case ConversationStep.WAITING_FOR_ANSWER:
         // The teacher should upload an image, not send text
         return "Please upload an image of the student's answer.";
-      
+
       case ConversationStep.WAITING_FOR_INSTRUCTION:
         return this.handleInstructionInput(userId, message);
-      
+
       case ConversationStep.COMPLETE:
         // Start a new grading session
         sessionStore.resetSession(userId);
         return "Starting a new grading session. Please send me the question you'd like to grade.";
-      
+
       default:
         return "I'm sorry, something went wrong. Let's start over. Please send me the question you'd like to grade.";
     }
@@ -46,16 +64,16 @@ class ChatService {
     try {
       // Extract text from the image
       const ocrText = await ocrService.extractTextFromImage(imagePath);
-      
+
       // Update session with the extracted text
       sessionStore.updateSession(userId, {
         studentAnswer: ocrText,
-        step: ConversationStep.WAITING_FOR_INSTRUCTION
+        step: ConversationStep.WAITING_FOR_INSTRUCTION,
       });
 
       return "Thanks! What would you like me to do? (e.g., 'Grade it for 6 marks', 'Give feedback')";
     } catch (error) {
-      console.error('Error processing image:', error);
+      console.error("Error processing image:", error);
       return "Sorry, I couldn't process the image. Please try uploading it again.";
     }
   }
@@ -67,7 +85,7 @@ class ChatService {
     // Update session with the question
     sessionStore.updateSession(userId, {
       question,
-      step: ConversationStep.WAITING_FOR_ANSWER
+      step: ConversationStep.WAITING_FOR_ANSWER,
     });
 
     return "Got it. Now upload the student's answer sheet image.";
@@ -76,28 +94,49 @@ class ChatService {
   /**
    * Handle the instruction input from the teacher
    */
-  private async handleInstructionInput(userId: string, instruction: string): Promise<string> {
+  private async handleInstructionInput(
+    userId: string,
+    instruction: string
+  ): Promise<string> {
     const session = sessionStore.getSession(userId);
+    console.log(
+      `Processing instruction: "${instruction}" for userId: ${userId}`
+    );
+    console.log(`Session data:`, JSON.stringify(session));
 
     // Check if we have all the required data
     if (!session.question || !session.studentAnswer) {
+      console.log(
+        `Missing data in session. Question: ${!!session.question}, Answer: ${!!session.studentAnswer}`
+      );
       return "I'm missing some information. Let's start over. Please send me the question you'd like to grade.";
     }
 
     // Extract marks from the instruction (e.g., "Grade it for 6 marks")
     const marksMatch = instruction.match(/(\d+)\s*marks/i);
     const marks = marksMatch ? parseInt(marksMatch[1], 10) : 10; // Default to 10 if not specified
+    console.log(`Using ${marks} marks for grading`);
 
     // Update session with the marks
     sessionStore.updateSession(userId, { marks });
 
     try {
+      console.log(`Sending to OpenAI for grading...`);
+      console.log(`Question: ${session.question.substring(0, 50)}...`);
+      console.log(
+        `Student Answer: ${session.studentAnswer.substring(0, 50)}...`
+      );
+
       // Call OpenAI to grade the answer
       const gradingResult = await openaiService.gradeAnswer(
         session.question,
         session.studentAnswer,
         instruction,
         marks
+      );
+
+      console.log(
+        `Received grading result: Score ${gradingResult.score}/${marks}`
       );
 
       // Format the response in a conversational way
@@ -108,7 +147,11 @@ class ChatService {
 
       return response;
     } catch (error) {
-      console.error('Error grading answer:', error);
+      console.error("Error grading answer:", error);
+      if (error instanceof Error) {
+        console.error("Error details:", error.message);
+        console.error("Error stack:", error.stack);
+      }
       return "Sorry, I couldn't process the grading request. Please try again.";
     }
   }
@@ -116,10 +159,14 @@ class ChatService {
   /**
    * Format the grading result into a conversational response
    */
-  private formatGradingResponse(result: GradingResult, maxMarks: number): string {
-    const mistakesText = result.mistakes.length > 0 
-      ? `❌ Mistakes:\n${result.mistakes.map(m => `- ${m}`).join('\n')}`
-      : '';
+  private formatGradingResponse(
+    result: GradingResult,
+    maxMarks: number
+  ): string {
+    const mistakesText =
+      result.mistakes.length > 0
+        ? `❌ Mistakes:\n${result.mistakes.map((m) => `- ${m}`).join("\n")}`
+        : "";
 
     return `
 ✅ Score: ${result.score}/${maxMarks}

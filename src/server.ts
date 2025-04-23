@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Set port
-const PORT = process.env.PORT || 3000;
+const PORT =3000;
 
 // Start the server
 app.listen(PORT, () => {
