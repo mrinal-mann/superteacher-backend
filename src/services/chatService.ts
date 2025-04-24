@@ -373,7 +373,7 @@ The more context you provide about what you're looking for, the better I can tai
    */
   private suggestDefaultMarks(
     question: string,
-    subject: SubjectArea
+    _subject: SubjectArea
   ): number | null {
     // Check if the question explicitly mentions marks
     const marksMatch = question.match(/\b(\d+)\s*(?:mark|point|score)s?\b/i);
