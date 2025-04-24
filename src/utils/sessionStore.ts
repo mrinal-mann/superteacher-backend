@@ -1,4 +1,4 @@
-import { SessionData, ConversationStep } from '../types';
+import { SessionData, ConversationStep } from "../types";
 
 /**
  * A simple in-memory store for user sessions
@@ -20,11 +20,17 @@ class SessionStore {
         userId,
         question: null,
         studentAnswer: null,
+        originalImage: null,
+        subjectArea: null,
+        contextualNotes: null,
         marks: null,
-        step: ConversationStep.WAITING_FOR_QUESTION
+        step: ConversationStep.WAITING_FOR_QUESTION,
+        gradingApproach: null,
+        lastInteraction: null,
+        previousGradingResults: null,
       });
     }
-    
+
     return this.sessions.get(userId)!;
   }
 
@@ -46,8 +52,14 @@ class SessionStore {
       userId,
       question: null,
       studentAnswer: null,
+      originalImage: null,
+      subjectArea: null,
+      contextualNotes: null,
       marks: null,
-      step: ConversationStep.WAITING_FOR_QUESTION
+      step: ConversationStep.WAITING_FOR_QUESTION,
+      gradingApproach: null,
+      lastInteraction: null,
+      previousGradingResults: null,
     });
   }
 }
