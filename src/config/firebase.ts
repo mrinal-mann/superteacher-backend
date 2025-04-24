@@ -1,6 +1,7 @@
 // src/config/firebase.ts
 import admin from "firebase-admin";
 import { getStorage } from "firebase-admin/storage";
+import { Bucket } from "@google-cloud/storage";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
@@ -89,7 +90,7 @@ if (!admin.apps.length) {
 }
 
 // Get and export the storage bucket
-let storage;
+let storage: Bucket;
 try {
   storage = getStorage().bucket();
   console.log("Firebase Storage bucket obtained successfully");
