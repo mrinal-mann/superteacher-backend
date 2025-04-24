@@ -9,6 +9,7 @@ import {
 import { sessionStore } from "../utils/sessionStore";
 import { ocrService } from "./ocrService";
 import { openaiService } from "./openaiService";
+import { storageService } from "./storageService";
 
 class ChatService {
   /**
@@ -472,15 +473,19 @@ Please let me know how you'd like to proceed.`;
     }
 
     try {
-      // Update with the image information
+      // Upload the image to Firebase Storage
+      console.log(`Uploading image to Firebase Storage: ${imagePath}`);
+      const imageUrl = await storageService.uploadFile(imagePath);
+
+      // Update with the image information (storing the URL instead of the path)
       sessionStore.updateSession(userId, {
-        originalImage: imagePath,
+        originalImage: imageUrl,
         step: ConversationStep.GRADING_IN_PROGRESS,
       });
 
-      // Extract text from the image
-      console.log(`Extracting text from image at ${imagePath}`);
-      const ocrText = await ocrService.extractTextFromImage(imagePath);
+      // Extract text from the image URL
+      console.log(`Extracting text from image URL: ${imageUrl}`);
+      const ocrText = await ocrService.extractTextFromImageUrl(imageUrl);
       console.log(`Successfully extracted OCR text (${ocrText.length} chars)`);
 
       // Update session with the extracted text
@@ -512,6 +517,108 @@ Please let me know how you'd like to proceed.`;
       });
 
       return "I encountered an issue processing that image. This could be due to image quality or format. Could you try uploading it again, perhaps with better lighting or clarity?";
+    }
+  }
+
+  /**
+   * Process an image from URL with OCR
+   */
+  async processImageFromUrl(userId: string, imageUrl: string): Promise<string> {
+    const session = this.getOrCreateSession(userId);
+    console.log(
+      `Processing image from URL for user ${userId}, session state: ${session.step}`
+    );
+
+    // Handle image upload for various session states
+    if (
+      session.step === ConversationStep.COMPLETE ||
+      session.step === ConversationStep.FOLLOW_UP
+    ) {
+      console.log(
+        `Received image in ${session.step} state, transitioning to new session`
+      );
+      // Keep the previous grading result for reference
+      const previousResults = session.previousGradingResults || [];
+      if (session.question) {
+        previousResults.push({
+          score: session.marks || 0,
+          outOf: session.marks || 10,
+          percentage: session.marks ? (session.marks / 10) * 100 : 0,
+          feedback: "Previous grading session",
+          strengths: [],
+          areas_for_improvement: [],
+          suggested_points: [],
+          correct_concepts: "",
+          misconceptions: "",
+          gradingApproach: session.gradingApproach || "balanced",
+          timeGraded: new Date(),
+          critical_thinking: 0,
+          organization: 0,
+          language_use: 0,
+          concept_application: 0,
+        });
+      }
+
+      // Reset but preserve history
+      sessionStore.updateSession(userId, {
+        question: "Assessment of student work",
+        studentAnswer: null,
+        originalImage: null,
+        marks: null,
+        step: ConversationStep.WAITING_FOR_ANSWER,
+        previousGradingResults: previousResults,
+      });
+    }
+
+    // If at initial state without a question, create a generic one
+    if (session.step === ConversationStep.INITIAL) {
+      sessionStore.updateSession(userId, {
+        question: "Assessment of student work",
+        step: ConversationStep.WAITING_FOR_ANSWER,
+      });
+    }
+
+    try {
+      // Store the image URL directly (no need to upload)
+      sessionStore.updateSession(userId, {
+        originalImage: imageUrl,
+        step: ConversationStep.GRADING_IN_PROGRESS,
+      });
+
+      // Extract text from the image URL
+      console.log(`Extracting text from image URL: ${imageUrl}`);
+      const ocrText = await ocrService.extractTextFromImageUrl(imageUrl);
+      console.log(`Successfully extracted OCR text (${ocrText.length} chars)`);
+
+      // Update session with the extracted text
+      sessionStore.updateSession(userId, {
+        studentAnswer: ocrText,
+        step: ConversationStep.WAITING_FOR_INSTRUCTION,
+      });
+
+      // Analyze the text content for better response
+      const contentType = this.analyzeContentType(
+        ocrText,
+        session.subjectArea as SubjectArea | null
+      );
+      const textPreview = this.createTextPreview(ocrText);
+
+      // Prepare response based on content
+      let response = this.generateImageProcessedResponse(
+        contentType,
+        textPreview
+      );
+
+      return response;
+    } catch (error) {
+      console.error(`Error processing image URL:`, error);
+
+      // Reset to waiting for answer state to allow retrying
+      sessionStore.updateSession(userId, {
+        step: ConversationStep.WAITING_FOR_ANSWER,
+      });
+
+      return "I encountered an issue processing that image. This could be due to image quality or the URL format. Could you try uploading the image again?";
     }
   }
 

@@ -17,28 +17,32 @@ class OcrService {
 
   constructor() {
     // Primary OCR endpoint configuration
-    this.ocrEndpoint = process.env.OCR_ENDPOINT || "https://grading-api.onrender.com/extract-text";
-    
+    this.ocrEndpoint =
+      process.env.OCR_ENDPOINT ||
+      "https://grading-api.onrender.com/extract-text";
+
     // Backup OCR service if available
     this.backupEndpoint = process.env.OCR_BACKUP_ENDPOINT || null;
-    
+
     // Demo mode settings to allow operation when OCR is unavailable
-    this.demoMode = 
-      process.env.OCR_DEMO_MODE === "true" || 
+    this.demoMode =
+      process.env.OCR_DEMO_MODE === "true" ||
       process.env.NODE_ENV === "production"; // Default to demo mode in production
-    
+
     // Retry configuration for robust OCR calls
     this.maxRetries = parseInt(process.env.OCR_MAX_RETRIES || "3", 10);
     this.retryDelay = parseInt(process.env.OCR_RETRY_DELAY || "2000", 10);
-    
+
     // Enable detailed logging for debugging
     this.enableLogging = process.env.OCR_LOGGING === "true" || true;
-    
+
     this.logInfo("OCR Service initialized with:");
     this.logInfo(`- Primary endpoint: ${this.ocrEndpoint}`);
     this.logInfo(`- Backup endpoint: ${this.backupEndpoint || "none"}`);
     this.logInfo(`- Demo mode: ${this.demoMode ? "enabled" : "disabled"}`);
-    this.logInfo(`- Max retries: ${this.maxRetries}, Retry delay: ${this.retryDelay}ms`);
+    this.logInfo(
+      `- Max retries: ${this.maxRetries}, Retry delay: ${this.retryDelay}ms`
+    );
   }
 
   /**
@@ -47,81 +51,120 @@ class OcrService {
   async extractTextFromImage(imagePath: string): Promise<string> {
     try {
       this.logInfo(`Processing image at: ${imagePath}`);
-      
+
       // Validate the image file exists and is accessible
       if (!fs.existsSync(imagePath)) {
         this.logError(`Image file does not exist: ${imagePath}`);
         return this.handleOcrFailure("File not found", imagePath);
       }
-      
+
       // Check file stats and size
       const stats = fs.statSync(imagePath);
-      this.logInfo(`Image file size: ${stats.size} bytes, Permissions: ${stats.mode.toString(8)}`);
-      
+      this.logInfo(
+        `Image file size: ${
+          stats.size
+        } bytes, Permissions: ${stats.mode.toString(8)}`
+      );
+
       if (stats.size === 0) {
         this.logError("Image file is empty (0 bytes)");
         return this.handleOcrFailure("Empty file", imagePath);
       }
-      
+
       if (stats.size > 5 * 1024 * 1024) {
         this.logInfo("Large image detected, might affect OCR processing time");
       }
-      
+
       // If demo mode is enabled, skip the actual OCR call
       if (this.demoMode) {
         this.logInfo("Demo mode is enabled, returning simulated OCR text");
         return this.getDemoText(path.basename(imagePath));
       }
-      
+
       // Try OCR processing with retries
       return await this.performOcrWithRetries(imagePath);
-      
     } catch (error) {
       this.logError("Error in OCR processing:", error);
       return this.handleOcrFailure("Processing error", imagePath);
     }
   }
-  
+
   /**
-   * Perform OCR with retries and fallback
+   * Extract text from an image URL rather than a local file
+   */
+  async extractTextFromImageUrl(imageUrl: string): Promise<string> {
+    try {
+      this.logInfo(`Processing image from URL: ${imageUrl}`);
+
+      // If demo mode is enabled, skip the actual OCR call
+      if (this.demoMode) {
+        this.logInfo("Demo mode is enabled, returning simulated OCR text");
+        return this.getDemoText(path.basename(imageUrl));
+      }
+
+      // Try OCR processing with retries
+      return await this.performOcrWithRetriesFromUrl(imageUrl);
+    } catch (error) {
+      this.logError("Error in OCR processing from URL:", error);
+      return this.handleOcrFailure("Processing error", imageUrl);
+    }
+  }
+
+  /**
+   * Perform OCR with retries and fallback for local files
    */
   private async performOcrWithRetries(imagePath: string): Promise<string> {
     let retries = 0;
     let lastError: any;
-    
+
     while (retries <= this.maxRetries) {
       try {
         // If not the first attempt, add delay with exponential backoff
         if (retries > 0) {
           const delay = this.retryDelay * Math.pow(2, retries - 1);
-          this.logInfo(`Retry ${retries}/${this.maxRetries} - Waiting ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          this.logInfo(
+            `Retry ${retries}/${this.maxRetries} - Waiting ${delay}ms...`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
-        
+
         // Try primary endpoint first
         if (retries < this.maxRetries) {
           try {
-            this.logInfo(`Attempting OCR with primary endpoint, attempt ${retries + 1}/${this.maxRetries + 1}`);
-            const result = await this.callOcrService(this.ocrEndpoint, imagePath);
+            this.logInfo(
+              `Attempting OCR with primary endpoint, attempt ${retries + 1}/${
+                this.maxRetries + 1
+              }`
+            );
+            const result = await this.callOcrService(
+              this.ocrEndpoint,
+              imagePath
+            );
             if (result) return result;
           } catch (error) {
             lastError = error;
-            this.logError(`Primary OCR endpoint failed on attempt ${retries + 1}:`, error);
+            this.logError(
+              `Primary OCR endpoint failed on attempt ${retries + 1}:`,
+              error
+            );
           }
         }
-        
+
         // Try backup endpoint if available and this is the last attempt
         if (retries === this.maxRetries && this.backupEndpoint) {
           try {
             this.logInfo("Trying backup OCR endpoint as last resort");
-            const result = await this.callOcrService(this.backupEndpoint, imagePath);
+            const result = await this.callOcrService(
+              this.backupEndpoint,
+              imagePath
+            );
             if (result) return result;
           } catch (error) {
             this.logError("Backup OCR endpoint also failed:", error);
             // Continue to use the primary endpoint error for consistency
           }
         }
-        
+
         retries++;
       } catch (error) {
         lastError = error;
@@ -129,48 +172,176 @@ class OcrService {
         this.logError(`OCR attempt ${retries} failed:`, error);
       }
     }
-    
+
     // If all attempts failed
     this.logError("All OCR attempts failed:", lastError);
     return this.handleOcrFailure("All attempts failed", imagePath);
   }
-  
+
   /**
-   * Call the OCR service with the provided endpoint
+   * Perform OCR with retries and fallback for image URLs
    */
-  private async callOcrService(endpoint: string, imagePath: string): Promise<string> {
+  private async performOcrWithRetriesFromUrl(
+    imageUrl: string
+  ): Promise<string> {
+    let retries = 0;
+    let lastError: any;
+
+    while (retries <= this.maxRetries) {
+      try {
+        // If not the first attempt, add delay with exponential backoff
+        if (retries > 0) {
+          const delay = this.retryDelay * Math.pow(2, retries - 1);
+          this.logInfo(
+            `Retry ${retries}/${this.maxRetries} - Waiting ${delay}ms...`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+
+        // Try primary endpoint first
+        if (retries < this.maxRetries) {
+          try {
+            this.logInfo(
+              `Attempting OCR with primary endpoint, attempt ${retries + 1}/${
+                this.maxRetries + 1
+              }`
+            );
+            const result = await this.callOcrServiceWithUrl(
+              this.ocrEndpoint,
+              imageUrl
+            );
+            if (result) return result;
+          } catch (error) {
+            lastError = error;
+            this.logError(
+              `Primary OCR endpoint failed on attempt ${retries + 1}:`,
+              error
+            );
+          }
+        }
+
+        // Try backup endpoint if available and this is the last attempt
+        if (retries === this.maxRetries && this.backupEndpoint) {
+          try {
+            this.logInfo("Trying backup OCR endpoint as last resort");
+            const result = await this.callOcrServiceWithUrl(
+              this.backupEndpoint,
+              imageUrl
+            );
+            if (result) return result;
+          } catch (error) {
+            this.logError("Backup OCR endpoint also failed:", error);
+            // Continue to use the primary endpoint error for consistency
+          }
+        }
+
+        retries++;
+      } catch (error) {
+        lastError = error;
+        retries++;
+        this.logError(`OCR attempt ${retries} failed:`, error);
+      }
+    }
+
+    // If all attempts failed
+    this.logError("All OCR attempts failed:", lastError);
+    return this.handleOcrFailure("All attempts failed", imageUrl);
+  }
+
+  /**
+   * Call the OCR service with a local file
+   */
+  private async callOcrService(
+    endpoint: string,
+    imagePath: string
+  ): Promise<string> {
     // Create form data for image upload
     const form = new FormData();
     form.append("file", fs.createReadStream(imagePath));
-    
+
     // Call the OCR service with increased timeout
     const response = await axios.post(endpoint, form, {
       headers: {
         ...form.getHeaders(),
         "X-Retry-Count": "0",
-        "Accept": "application/json"
+        Accept: "application/json",
       },
       timeout: 120000, // 2-minute timeout for OCR processing
-      validateStatus: status => status === 200, // Only accept 200 status
+      validateStatus: (status) => status === 200, // Only accept 200 status
     });
-    
+
     // Validate response
     if (response.data && response.data.extracted_text) {
       // Check if the response is empty or too short
       if (response.data.extracted_text.trim().length < 5) {
-        this.logInfo("OCR returned empty or very short result, checking if image requires processing");
+        this.logInfo(
+          "OCR returned empty or very short result, checking if image requires processing"
+        );
         return this.handleOcrFailure("Empty result", imagePath);
       }
-      
+
       // Log success and return extracted text
-      this.logInfo(`OCR successful, extracted ${response.data.extracted_text.length} characters`);
+      this.logInfo(
+        `OCR successful, extracted ${response.data.extracted_text.length} characters`
+      );
       return response.data.extracted_text;
     } else {
-      this.logError("OCR response missing extracted_text field:", response.data);
+      this.logError(
+        "OCR response missing extracted_text field:",
+        response.data
+      );
       throw new Error("Invalid OCR response format");
     }
   }
-  
+
+  /**
+   * Call the OCR service with an image URL
+   */
+  private async callOcrServiceWithUrl(
+    endpoint: string,
+    imageUrl: string
+  ): Promise<string> {
+    // Make a POST request with the image URL
+    this.logInfo(`Sending image URL to OCR service: ${imageUrl}`);
+
+    const response = await axios.post(
+      endpoint,
+      {
+        image_url: imageUrl,
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-Retry-Count": "0",
+        },
+        timeout: 120000, // 2-minute timeout for OCR processing
+        validateStatus: (status) => status === 200, // Only accept 200 status
+      }
+    );
+
+    // Validate response
+    if (response.data && response.data.extracted_text) {
+      // Check if the response is empty or too short
+      if (response.data.extracted_text.trim().length < 5) {
+        this.logInfo("OCR returned empty or very short result from URL");
+        return this.handleOcrFailure("Empty result", imageUrl);
+      }
+
+      // Log success and return extracted text
+      this.logInfo(
+        `OCR successful from URL, extracted ${response.data.extracted_text.length} characters`
+      );
+      return response.data.extracted_text;
+    } else {
+      this.logError(
+        "OCR response missing extracted_text field:",
+        response.data
+      );
+      throw new Error("Invalid OCR response format");
+    }
+  }
+
   /**
    * Handle OCR failure with appropriate fallback
    */
@@ -185,12 +356,16 @@ class OcrService {
    */
   private getDemoText(filename: string): string {
     this.logInfo(`Generating demo text for: ${filename}`);
-    
+
     // Check for indicators in the filename to customize demo text
     const lowerFilename = filename.toLowerCase();
-    
+
     // Math demo text
-    if (lowerFilename.includes("math") || lowerFilename.includes("calc") || lowerFilename.includes("equ")) {
+    if (
+      lowerFilename.includes("math") ||
+      lowerFilename.includes("calc") ||
+      lowerFilename.includes("equ")
+    ) {
       return `
 To solve this problem, I used the quadratic formula:
 x = (-b ± √(b² - 4ac)) / 2a
@@ -210,9 +385,13 @@ x₂ = (-5 - 7) / 4 = -12/4 = -3
 Therefore, the solution set is {0.5, -3}.
       `.trim();
     }
-    
+
     // Essay/English demo text
-    if (lowerFilename.includes("essay") || lowerFilename.includes("english") || lowerFilename.includes("lit")) {
+    if (
+      lowerFilename.includes("essay") ||
+      lowerFilename.includes("english") ||
+      lowerFilename.includes("lit")
+    ) {
       return `
 The theme of identity in "To Kill a Mockingbird" is primarily explored through the character development of Scout Finch. As she navigates childhood in the racially charged atmosphere of Maycomb County, her understanding of herself and her place in society evolves significantly.
 
@@ -223,9 +402,13 @@ The trial of Tom Robinson serves as a crucial catalyst for Scout's developing id
 By the end of the novel, Scout has developed a more nuanced understanding of identity. She recognizes that people's identities are multifaceted and that empathy—"walking in someone else's shoes" as Atticus teaches her—is essential to truly understanding others. The novel concludes with Scout having internalized this lesson, suggesting that her identity has been enriched by her experiences and the moral guidance of her father.
       `.trim();
     }
-    
+
     // Science demo text
-    if (lowerFilename.includes("science") || lowerFilename.includes("bio") || lowerFilename.includes("chem")) {
+    if (
+      lowerFilename.includes("science") ||
+      lowerFilename.includes("bio") ||
+      lowerFilename.includes("chem")
+    ) {
       return `
 The water cycle is a continuous process that circulates water throughout Earth's systems. It consists of several key phases:
 
@@ -240,7 +423,7 @@ The water cycle is a continuous process that circulates water throughout Earth's
 This cycle is crucial for Earth's ecosystems as it redistributes water, regulates temperature, and supports all living organisms. Human activities such as deforestation, pollution, and climate change can disrupt this natural cycle, affecting weather patterns and water availability worldwide.
       `.trim();
     }
-    
+
     // Default demo text for general responses
     return `
 In response to this question, I believe the key factors to consider are:
@@ -258,7 +441,7 @@ The evidence supporting this analysis comes from primary sources including gover
   }
 
   /**
-   * Log information messages
+   * Log informational messages
    */
   private logInfo(message: string, ...args: any[]): void {
     if (this.enableLogging) {
@@ -273,11 +456,18 @@ The evidence supporting this analysis comes from primary sources including gover
     console.error(`[OCR Service ERROR] ${message}`);
     if (error) {
       if (axios.isAxiosError(error)) {
-        console.error(`Status: ${error.response?.status || 'unknown'}`);
-        console.error(`Response: ${JSON.stringify(error.response?.data || {}).substring(0, 200)}...`);
+        console.error(`Status: ${error.response?.status || "unknown"}`);
+        console.error(
+          `Response: ${JSON.stringify(error.response?.data || {}).substring(
+            0,
+            200
+          )}...`
+        );
       } else if (error instanceof Error) {
         console.error(`${error.name}: ${error.message}`);
-        console.error(`Stack: ${error.stack?.split('\n')[0] || 'No stack trace'}`);
+        console.error(
+          `Stack: ${error.stack?.split("\n")[0] || "No stack trace"}`
+        );
       } else {
         console.error(error);
       }

@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import fs from "fs";
 import path from "path";
 import { chatService } from "../services/chatService";
+import { storageService } from "../services/storageService";
 
 // Configure formidable options - use /tmp for Render compatibility
 const uploadDir =
@@ -44,7 +45,26 @@ export const chatController = {
  */
 async function handleTextMessage(req: Request, res: Response): Promise<void> {
   try {
-    const { message, userId } = req.body;
+    const { message, userId, image_url } = req.body;
+
+    // Check if this is a text message with an image URL
+    if (image_url) {
+      const userIdToUse = userId || uuidv4();
+      console.log(`Processing image URL for user ${userIdToUse}: ${image_url}`);
+
+      // Process the image URL directly with the OCR service
+      const response = await chatService.processImageFromUrl(
+        userIdToUse,
+        image_url
+      );
+
+      // Send the response
+      res.json({
+        userId: userIdToUse,
+        message: response,
+      });
+      return;
+    }
 
     if (!message) {
       res.status(400).json({ error: "Message is required" });
@@ -169,8 +189,12 @@ async function handleFileUpload(req: Request, res: Response): Promise<void> {
     try {
       console.log(`Processing image for user ${userId}...`);
 
-      // Process the image
-      const response = await chatService.processImageUpload(userId, imagePath);
+      // Upload to Firebase Storage first to get a URL
+      const imageUrl = await storageService.uploadFile(imagePath);
+      console.log(`Image uploaded to storage, URL: ${imageUrl}`);
+
+      // Process the image URL instead of the local file
+      const response = await chatService.processImageFromUrl(userId, imageUrl);
       console.log("Image processed successfully");
 
       // Send response
