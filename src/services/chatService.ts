@@ -5,6 +5,13 @@ import { openaiService } from "./openaiService";
 
 class ChatService {
   /**
+   * Get the current session for a user ID
+   */
+  getSession(userId: string): SessionData {
+    return sessionStore.getSession(userId);
+  }
+
+  /**
    * Initialize session if needed or prepare it for image upload
    */
   initializeSessionIfNeeded(userId: string): SessionData {

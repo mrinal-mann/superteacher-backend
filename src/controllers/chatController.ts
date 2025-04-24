@@ -36,7 +36,7 @@ export const chatController = {
   },
 
   /**
-   * Handle the initial greeting
+   * Handle the initial greeting with streaming support
    */
   handleGreeting(req: Request, res: Response): void {
     // Extract or generate user ID
@@ -48,11 +48,30 @@ export const chatController = {
 
     console.log(`Session reset for user ${userId} during greeting`);
 
-    res.json({
-      userId,
-      message:
-        "Hi! I'm SuperTeacher 👩‍🏫 Please send me the question you'd like to grade.",
-    });
+    // Check if streaming is requested
+    const useStreaming = req.headers["accept"]?.includes("text/event-stream");
+
+    if (useStreaming) {
+      // Setup streaming response
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      // Send the user ID first
+      res.write(`data: ${JSON.stringify({ userId })}\n\n`);
+
+      // Stream the greeting message character by character
+      const greeting =
+        "Hi! I'm SuperTeacher 👩‍🏫 Please send me the question you'd like to grade.";
+      streamResponse(res, greeting);
+    } else {
+      // Send regular JSON response
+      res.json({
+        userId,
+        message:
+          "Hi! I'm SuperTeacher 👩‍🏫 Please send me the question you'd like to grade.",
+      });
+    }
   },
 };
 
@@ -69,6 +88,9 @@ async function handleTextMessage(req: Request, res: Response): Promise<void> {
   // Extract message and user ID
   const { message, userId = uuidv4() } = req.body;
 
+  // Check if client supports streaming
+  const useStreaming = req.headers["accept"]?.includes("text/event-stream");
+
   // Special case for initial greeting
   if (message.toLowerCase() === "hello" || message.toLowerCase() === "hi") {
     chatController.handleGreeting(req, res);
@@ -76,13 +98,37 @@ async function handleTextMessage(req: Request, res: Response): Promise<void> {
   }
 
   // Process the message
-  const response = await chatService.processTextMessage(userId, message);
+  const session = chatService.getSession(userId);
 
-  // Send response
-  res.json({
-    userId,
-    message: response,
-  });
+  if (useStreaming) {
+    // Set up streaming response
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    // Send the user ID first
+    res.write(`data: ${JSON.stringify({ userId })}\n\n`);
+
+    try {
+      const response = await chatService.processTextMessage(userId, message);
+
+      // Stream the response
+      streamResponse(res, response);
+    } catch (error) {
+      console.error("Error in streaming response:", error);
+      res.write(`data: ${JSON.stringify({ error: "An error occurred" })}\n\n`);
+      res.end();
+    }
+  } else {
+    // Regular JSON response
+    const response = await chatService.processTextMessage(userId, message);
+
+    // Send response
+    res.json({
+      userId,
+      message: response,
+    });
+  }
 }
 
 /**
@@ -180,24 +226,59 @@ async function handleFileUpload(req: Request, res: Response): Promise<void> {
       const session = chatService.initializeSessionIfNeeded(userId);
       console.log("Session state:", session.step);
 
-      // Process the image
-      const response = await chatService.processImageUpload(userId, imagePath);
-      console.log("Image processed successfully");
+      // Check if client supports streaming
+      const useStreaming = req.headers["accept"]?.includes("text/event-stream");
 
-      // Send response
-      res.json({
-        userId,
-        message: response,
-      });
+      if (useStreaming) {
+        // Set up streaming response
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
 
-      // Clean up the temporary file AFTER processing is complete
-      try {
-        if (fs.existsSync(imagePath)) {
-          fs.unlinkSync(imagePath);
-          console.log(`Cleaned up temporary file: ${imagePath}`);
+        // Send the user ID first
+        res.write(`data: ${JSON.stringify({ userId })}\n\n`);
+
+        // Process the image
+        const response = await chatService.processImageUpload(
+          userId,
+          imagePath
+        );
+
+        // Stream the response
+        streamResponse(res, response);
+
+        // Clean up the temporary file AFTER processing is complete
+        try {
+          if (fs.existsSync(imagePath)) {
+            fs.unlinkSync(imagePath);
+            console.log(`Cleaned up temporary file: ${imagePath}`);
+          }
+        } catch (cleanupError) {
+          console.error("Error cleaning up file:", cleanupError);
         }
-      } catch (cleanupError) {
-        console.error("Error cleaning up file:", cleanupError);
+      } else {
+        // Process the image
+        const response = await chatService.processImageUpload(
+          userId,
+          imagePath
+        );
+        console.log("Image processed successfully");
+
+        // Send response
+        res.json({
+          userId,
+          message: response,
+        });
+
+        // Clean up the temporary file AFTER processing is complete
+        try {
+          if (fs.existsSync(imagePath)) {
+            fs.unlinkSync(imagePath);
+            console.log(`Cleaned up temporary file: ${imagePath}`);
+          }
+        } catch (cleanupError) {
+          console.error("Error cleaning up file:", cleanupError);
+        }
       }
     } catch (error) {
       console.error("Error processing image:", error);
@@ -205,5 +286,35 @@ async function handleFileUpload(req: Request, res: Response): Promise<void> {
 
       // Don't delete the file on error to allow debugging
     }
+  });
+}
+
+/**
+ * Stream a response text character by character with delays
+ */
+function streamResponse(res: Response, text: string): void {
+  let index = 0;
+  const interval = 15; // milliseconds between characters
+
+  const streamInterval = setInterval(() => {
+    if (index < text.length) {
+      // Send the next character
+      const char = text.charAt(index);
+      res.write(`data: ${JSON.stringify({ char })}\n\n`);
+      index++;
+    } else {
+      // End of text
+      clearInterval(streamInterval);
+
+      // Send end marker
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      res.end();
+    }
+  }, interval);
+
+  // Handle client disconnect
+  res.on("close", () => {
+    clearInterval(streamInterval);
+    res.end();
   });
 }
