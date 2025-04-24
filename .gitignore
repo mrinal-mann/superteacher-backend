@@ -15,3 +15,12 @@ uploads/*
 uploads/
 
 uploads/
+
+render.yaml
+
+dist
+
+dist/*
+
+dist/
+

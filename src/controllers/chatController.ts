@@ -98,7 +98,7 @@ async function handleTextMessage(req: Request, res: Response): Promise<void> {
   }
 
   // Process the message
-  const session = chatService.getSession(userId);
+  // const session = chatService.getSession(userId);
 
   if (useStreaming) {
     // Set up streaming response
