@@ -14,6 +14,16 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// Better CORS configuration
+app.use(
+  cors({
+    origin: "*", // For testing, allow all origins
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Accept", "Authorization"],
+    credentials: true,
+    maxAge: 86400, // Cache preflight requests for 24 hours
+  })
+);
 // Routes
 app.use("/api", chatRoutes);
 
@@ -27,9 +37,10 @@ app.get("/health", (_req: express.Request, res: express.Response) => {
     fs.unlinkSync(testFile);
 
     // Check custom upload directory
-    const uploadDir = process.env.NODE_ENV === "production"
-    ? "/tmp"
-    : path.join(__dirname, "../../uploads");
+    const uploadDir =
+      process.env.NODE_ENV === "production"
+        ? "/tmp"
+        : path.join(__dirname, "../../uploads");
 
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
