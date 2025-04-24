@@ -37,115 +37,34 @@ export const chatController = {
       res.status(500).json({ error: "Failed to process request" });
     }
   },
-
-  /**
-   * Handle the initial greeting with streaming support
-   */
-  handleGreeting(req: Request, res: Response): void {
-    // Extract or generate user ID
-    const userId = req.body.userId || uuidv4();
-
-    // Reset the session for this user
-    const { sessionStore } = require("../utils/sessionStore");
-    sessionStore.resetSession(userId);
-
-    console.log(`Session reset for user ${userId} during greeting`);
-
-    // Check if streaming is requested
-    const useStreaming = req.headers["accept"]?.includes("text/event-stream");
-
-    if (useStreaming) {
-      // Setup streaming response
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-
-      // Send the user ID first
-      res.write(`data: ${JSON.stringify({ userId })}\n\n`);
-
-      // Stream the greeting message character by character
-      const greeting =
-        "Hi! I'm SuperTeacher 👩‍🏫 Please send me the question you'd like to grade.";
-      streamResponse(res, greeting);
-    } else {
-      // Send regular JSON response
-      res.json({
-        userId,
-        message:
-          "Hi! I'm SuperTeacher 👩‍🏫 Please send me the question you'd like to grade.",
-      });
-    }
-  },
 };
 
 /**
  * Process a text message request
  */
 async function handleTextMessage(req: Request, res: Response): Promise<void> {
-  // Validate request body
-  if (!req.body || !req.body.message) {
-    res.status(400).json({ error: "Missing required field: message" });
-    return;
-  }
+  try {
+    const { message, userId } = req.body;
 
-  // Extract message and user ID
-  const { message, userId: rawUserId } = req.body;
-
-  // Ensure valid userId format
-  const userId =
-    rawUserId && typeof rawUserId === "string" && rawUserId.trim().length > 0
-      ? rawUserId.trim()
-      : uuidv4();
-
-  console.log(`Processing text message for user ${userId}: "${message}"`);
-
-  // Check if client supports streaming
-  const useStreaming = req.headers["accept"]?.includes("text/event-stream");
-
-  // Special case for initial greeting
-  if (
-    message.toLowerCase() === "hello" ||
-    message.toLowerCase() === "hi" ||
-    message.toLowerCase().includes("hello") ||
-    message.toLowerCase().includes("hi") ||
-    message.toLowerCase().includes("hey") ||
-    message.toLowerCase().includes("start")
-  ) {
-    chatController.handleGreeting(req, res);
-    return;
-  }
-
-  // Process the message
-  // const session = chatService.getSession(userId);
-
-  if (useStreaming) {
-    // Set up streaming response
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    // Send the user ID first
-    res.write(`data: ${JSON.stringify({ userId })}\n\n`);
-
-    try {
-      const response = await chatService.processTextMessage(userId, message);
-
-      // Stream the response
-      streamResponse(res, response);
-    } catch (error) {
-      console.error("Error in streaming response:", error);
-      res.write(`data: ${JSON.stringify({ error: "An error occurred" })}\n\n`);
-      res.end();
+    if (!message) {
+      res.status(400).json({ error: "Message is required" });
+      return;
     }
-  } else {
-    // Regular JSON response
-    const response = await chatService.processTextMessage(userId, message);
 
-    // Send response
+    const userIdToUse = userId || uuidv4();
+    console.log(`Processing text message for user ${userIdToUse}`);
+
+    // Process the message
+    const response = await chatService.processTextMessage(userIdToUse, message);
+
+    // Send the response
     res.json({
-      userId,
+      userId: userIdToUse,
       message: response,
     });
+  } catch (error) {
+    console.error("Error processing text message:", error);
+    res.status(500).json({ error: "Failed to process message" });
   }
 }
 
@@ -163,16 +82,7 @@ async function handleFileUpload(req: Request, res: Response): Promise<void> {
     maxFileSize: 10 * 1024 * 1024, // 10MB limit
   });
 
-  // Enhanced debugging
-  form.on("fileBegin", (formName, file) => {
-    console.log(`File upload starting: ${formName}`, file);
-  });
-
-  form.on("progress", (bytesReceived, bytesExpected) => {
-    console.log(`Upload progress: ${bytesReceived}/${bytesExpected} bytes`);
-  });
-
-  // Process the form
+  // Parse the form
   form.parse(req, async (err, fields, files) => {
     if (err) {
       console.error("Error parsing form:", err);
@@ -246,7 +156,8 @@ async function handleFileUpload(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const imagePath = (fileField as { filepath: string }).filepath;
+    // @ts-ignore - handle formidable types
+    const imagePath = fileField.filepath || fileField.path;
     console.log(`Image path: ${imagePath}`);
 
     if (!imagePath || !fs.existsSync(imagePath)) {
@@ -258,101 +169,28 @@ async function handleFileUpload(req: Request, res: Response): Promise<void> {
     try {
       console.log(`Processing image for user ${userId}...`);
 
-      // Initialize session - always reset if starting a new conversation
-      const { sessionStore } = require("../utils/sessionStore");
-      const session = sessionStore.getSession(userId);
+      // Process the image
+      const response = await chatService.processImageUpload(userId, imagePath);
+      console.log("Image processed successfully");
 
-      console.log(`Current session state for user ${userId}: ${session.step}`);
+      // Send response
+      res.json({
+        userId,
+        message: response,
+      });
 
-      // Check if client supports streaming
-      const useStreaming = req.headers["accept"]?.includes("text/event-stream");
-
-      if (useStreaming) {
-        // Set up streaming response
-        res.setHeader("Content-Type", "text/event-stream");
-        res.setHeader("Cache-Control", "no-cache");
-        res.setHeader("Connection", "keep-alive");
-
-        // Send the user ID first
-        res.write(`data: ${JSON.stringify({ userId })}\n\n`);
-
-        // Process the image
-        const response = await chatService.processImageUpload(
-          userId,
-          imagePath
-        );
-
-        // Stream the response
-        streamResponse(res, response);
-
-        // Clean up the temporary file AFTER processing is complete
-        try {
-          if (fs.existsSync(imagePath)) {
-            fs.unlinkSync(imagePath);
-            console.log(`Cleaned up temporary file: ${imagePath}`);
-          }
-        } catch (cleanupError) {
-          console.error("Error cleaning up file:", cleanupError);
+      // Clean up the temporary file AFTER processing is complete
+      try {
+        if (fs.existsSync(imagePath)) {
+          fs.unlinkSync(imagePath);
+          console.log(`Cleaned up temporary file: ${imagePath}`);
         }
-      } else {
-        // Process the image
-        const response = await chatService.processImageUpload(
-          userId,
-          imagePath
-        );
-        console.log("Image processed successfully");
-
-        // Send response
-        res.json({
-          userId,
-          message: response,
-        });
-
-        // Clean up the temporary file AFTER processing is complete
-        try {
-          if (fs.existsSync(imagePath)) {
-            fs.unlinkSync(imagePath);
-            console.log(`Cleaned up temporary file: ${imagePath}`);
-          }
-        } catch (cleanupError) {
-          console.error("Error cleaning up file:", cleanupError);
-        }
+      } catch (cleanupError) {
+        console.error("Error cleaning up file:", cleanupError);
       }
     } catch (error) {
       console.error("Error processing image:", error);
       res.status(500).json({ error: "Failed to process image" });
-
-      // Don't delete the file on error to allow debugging
     }
-  });
-}
-
-/**
- * Stream a response text character by character with delays
- */
-function streamResponse(res: Response, text: string): void {
-  let index = 0;
-  const interval = 15; // milliseconds between characters
-
-  const streamInterval = setInterval(() => {
-    if (index < text.length) {
-      // Send the next character
-      const char = text.charAt(index);
-      res.write(`data: ${JSON.stringify({ char })}\n\n`);
-      index++;
-    } else {
-      // End of text
-      clearInterval(streamInterval);
-
-      // Send end marker
-      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-      res.end();
-    }
-  }, interval);
-
-  // Handle client disconnect
-  res.on("close", () => {
-    clearInterval(streamInterval);
-    res.end();
   });
 }
