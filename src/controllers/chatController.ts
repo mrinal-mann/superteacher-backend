@@ -92,7 +92,14 @@ async function handleTextMessage(req: Request, res: Response): Promise<void> {
   const useStreaming = req.headers["accept"]?.includes("text/event-stream");
 
   // Special case for initial greeting
-  if (message.toLowerCase() === "hello" || message.toLowerCase() === "hi") {
+  if (
+    message.toLowerCase() === "hello" ||
+    message.toLowerCase() === "hi" ||
+    message.toLowerCase().includes("hello") ||
+    message.toLowerCase().includes("hi") ||
+    message.toLowerCase().includes("hey") ||
+    message.toLowerCase().includes("start")
+  ) {
     chatController.handleGreeting(req, res);
     return;
   }
