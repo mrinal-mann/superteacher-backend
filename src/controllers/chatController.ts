@@ -8,9 +8,8 @@ import { chatService } from "../services/chatService";
 // Configure formidable options - use /tmp for Render compatibility
 const uploadDir =
   process.env.NODE_ENV === "production"
-    ? path.join("/tmp", "superteacher-uploads")
+    ? "/tmp"
     : path.join(__dirname, "../../uploads");
-
 // Ensure uploads directory exists
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
