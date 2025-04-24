@@ -90,7 +90,15 @@ async function handleTextMessage(req: Request, res: Response): Promise<void> {
   }
 
   // Extract message and user ID
-  const { message, userId = uuidv4() } = req.body;
+  const { message, userId: rawUserId } = req.body;
+
+  // Ensure valid userId format
+  const userId =
+    rawUserId && typeof rawUserId === "string" && rawUserId.trim().length > 0
+      ? rawUserId.trim()
+      : uuidv4();
+
+  console.log(`Processing text message for user ${userId}: "${message}"`);
 
   // Check if client supports streaming
   const useStreaming = req.headers["accept"]?.includes("text/event-stream");
@@ -176,15 +184,19 @@ async function handleFileUpload(req: Request, res: Response): Promise<void> {
     console.log("Form parsed successfully");
     console.log("Fields received:", JSON.stringify(fields));
     console.log("Files received:", Object.keys(files));
-    console.log("Files details:", JSON.stringify(files, null, 2));
 
     // Extract user ID from form fields or generate one
-    const userId =
-      (fields.userId && Array.isArray(fields.userId)
-        ? fields.userId[0]
-        : fields.userId) || uuidv4();
+    const rawUserId =
+      fields.userId &&
+      (Array.isArray(fields.userId) ? fields.userId[0] : fields.userId);
 
-    console.log("Using userId:", userId);
+    // Make sure we have a valid userId format
+    const userId =
+      rawUserId && typeof rawUserId === "string" && rawUserId.trim().length > 0
+        ? rawUserId.trim()
+        : uuidv4();
+
+    console.log(`Processing file upload for user ${userId}`);
 
     // Check if any file was uploaded
     if (!files || Object.keys(files).length === 0) {
@@ -193,32 +205,40 @@ async function handleFileUpload(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Try to get file with more flexibility
+    // Process the uploaded file
     let fileField = null;
-    const fileKeys = Object.keys(files);
 
-    // Log each file key
-    for (const key of fileKeys) {
-      console.log(`Found file with key: ${key}`);
-      fileField = files[key];
-      if (fileField && !Array.isArray(fileField)) {
-        console.log(`Using file from key: ${key}`);
-        break;
-      }
-    }
-
-    // Specific check for 'image' and 'file' keys
+    // Check for 'image' field first (our primary field name)
     if (files.image) {
       console.log("'image' field found");
       fileField = Array.isArray(files.image) ? files.image[0] : files.image;
-    } else if (files.file) {
+    }
+    // Then check for 'file' field
+    else if (files.file) {
       console.log("'file' field found");
       fileField = Array.isArray(files.file) ? files.file[0] : files.file;
-    } else {
+    }
+    // If neither specific field is found, try to get the first available file
+    else {
+      const fileKeys = Object.keys(files);
       console.log(
-        "Neither 'image' nor 'file' field found in:",
-        Object.keys(files)
+        `Neither 'image' nor 'file' field found. Available keys: ${fileKeys.join(
+          ", "
+        )}`
       );
+
+      for (const key of fileKeys) {
+        fileField = files[key];
+        // If it's an array, get the first element
+        if (Array.isArray(fileField) && fileField.length > 0) {
+          fileField = fileField[0];
+        }
+
+        if (fileField) {
+          console.log(`Using file from key: ${key}`);
+          break;
+        }
+      }
     }
 
     if (!fileField) {
@@ -228,14 +248,22 @@ async function handleFileUpload(req: Request, res: Response): Promise<void> {
     }
 
     const imagePath = (fileField as { filepath: string }).filepath;
-    console.log("Image path:", imagePath);
+    console.log(`Image path: ${imagePath}`);
+
+    if (!imagePath || !fs.existsSync(imagePath)) {
+      console.error(`File doesn't exist at path: ${imagePath}`);
+      res.status(400).json({ error: "File upload failed" });
+      return;
+    }
 
     try {
-      console.log("Processing image...");
+      console.log(`Processing image for user ${userId}...`);
 
-      // Make sure we have a question before processing the image
-      const session = chatService.initializeSessionIfNeeded(userId);
-      console.log("Session state:", session.step);
+      // Initialize session - always reset if starting a new conversation
+      const { sessionStore } = require("../utils/sessionStore");
+      const session = sessionStore.getSession(userId);
+
+      console.log(`Current session state for user ${userId}: ${session.step}`);
 
       // Check if client supports streaming
       const useStreaming = req.headers["accept"]?.includes("text/event-stream");

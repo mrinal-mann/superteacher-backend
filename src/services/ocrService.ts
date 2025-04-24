@@ -89,42 +89,74 @@ class OcrService {
 
       console.log(`Sending image to remote OCR service at ${this.ocrEndpoint}`);
 
-      // Call the OCR service
-      const response = await axios.post(this.ocrEndpoint, form, {
-        headers: {
-          ...form.getHeaders(),
-        },
-        timeout: 60000, // 60 second timeout for OCR processing
-      });
+      // Implement retry logic for the OCR call
+      let retries = 0;
+      const maxRetries = 3;
+      let lastError;
 
-      // Log OCR results (for debugging)
-      console.log("OCR Response status:", response.status);
-      console.log("OCR Response data keys:", Object.keys(response.data));
+      while (retries < maxRetries) {
+        try {
+          // Call the OCR service
+          const response = await axios.post(this.ocrEndpoint, form, {
+            headers: {
+              ...form.getHeaders(),
+            },
+            timeout: 60000, // 60 second timeout for OCR processing
+          });
 
-      if (response.data) {
-        console.log(
-          "OCR Text length:",
-          response.data.extracted_text?.length || 0
-        );
-      }
+          // Log OCR results
+          console.log("OCR Response status:", response.status);
+          console.log("OCR Response data keys:", Object.keys(response.data));
 
-      // Extract and return the OCR text
-      if (response.data && response.data.extracted_text) {
-        return response.data.extracted_text;
-      } else {
-        console.error(
-          "OCR response format error:",
-          JSON.stringify(response.data)
-        );
+          if (response.data) {
+            console.log(
+              "OCR Text length:",
+              response.data.extracted_text?.length || 0
+            );
+          }
 
-        if (this.demoMode) {
-          return this.getDemoText(path.basename(imagePath));
+          // Extract and return the OCR text
+          if (response.data && response.data.extracted_text) {
+            return response.data.extracted_text;
+          } else {
+            console.error(
+              "OCR response format error:",
+              JSON.stringify(response.data)
+            );
+
+            if (this.demoMode) {
+              return this.getDemoText(path.basename(imagePath));
+            }
+
+            throw new Error("OCR service did not return text");
+          }
+        } catch (error) {
+          lastError = error;
+          retries++;
+          console.error(`OCR attempt ${retries} failed:`, error);
+
+          if (retries < maxRetries) {
+            const delay = retries * 1000; // Exponential backoff
+            console.log(`Retrying in ${delay}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          }
         }
-
-        throw new Error("OCR service did not return text");
       }
+
+      // All retries failed
+      console.error("All OCR retries failed:", lastError);
+
+      if (this.demoMode) {
+        console.log("Using demo mode for OCR after all retries failed");
+        return this.getDemoText(path.basename(imagePath));
+      }
+
+      throw (
+        lastError ||
+        new Error("Failed to extract text from image after multiple attempts")
+      );
     } catch (error) {
-      console.error("Error calling OCR service:", error);
+      console.error("Error in OCR processing:", error);
 
       if (axios.isAxiosError(error)) {
         if (error.response) {
