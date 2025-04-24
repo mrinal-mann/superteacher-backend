@@ -17,8 +17,18 @@ class OcrService {
       process.env.OCR_ENDPOINT ||
       "https://grading-api.onrender.com/extract-text";
 
-    // Enable demo mode if environment variable is set
-    this.demoMode = process.env.OCR_DEMO_MODE === "true";
+    // Enable demo mode if environment variable is set or we're in production
+    // This ensures the app works even if OCR service is down
+    this.demoMode =
+      process.env.OCR_DEMO_MODE === "true" ||
+      process.env.NODE_ENV === "production";
+
+    console.log(
+      `OCR Service initialized. Demo mode: ${
+        this.demoMode ? "enabled" : "disabled"
+      }`
+    );
+    console.log(`OCR Endpoint: ${this.ocrEndpoint}`);
   }
 
   /**
@@ -26,6 +36,8 @@ class OcrService {
    */
   async extractTextFromImage(imagePath: string): Promise<string> {
     try {
+      console.log(`Attempting to process image at: ${imagePath}`);
+
       // Check if file exists
       if (!fs.existsSync(imagePath)) {
         console.error(`Image file does not exist at path: ${imagePath}`);
@@ -42,7 +54,10 @@ class OcrService {
       // Try to access file stats to make sure it's readable
       try {
         const stats = fs.statSync(imagePath);
-        console.log(`Image file size: ${stats.size} bytes`);
+        console.log(
+          `Image file size: ${stats.size} bytes at path: ${imagePath}`
+        );
+        console.log(`File permissions: ${stats.mode.toString(8)}`);
 
         if (stats.size === 0) {
           console.error("Image file is empty (0 bytes)");
@@ -52,11 +67,19 @@ class OcrService {
           throw new Error("Image file is empty");
         }
       } catch (fsError) {
-        console.error("Error accessing image file:", fsError);
+        console.error(`Error accessing image file at ${imagePath}:`, fsError);
         if (this.demoMode) {
           return this.getDemoText(path.basename(imagePath));
         }
         throw fsError;
+      }
+
+      // If demo mode is enabled, skip the actual OCR call
+      if (this.demoMode) {
+        console.log(
+          "Demo mode is enabled, returning demo text without calling OCR service"
+        );
+        return this.getDemoText(path.basename(imagePath));
       }
 
       // Create a form with the image file

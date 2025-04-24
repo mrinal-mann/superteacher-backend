@@ -5,8 +5,12 @@ import fs from "fs";
 import path from "path";
 import { chatService } from "../services/chatService";
 
-// Configure formidable options
-const uploadDir = path.join(__dirname, "../../uploads");
+// Configure formidable options - use /tmp for Render compatibility
+const uploadDir =
+  process.env.NODE_ENV === "production"
+    ? path.join("/tmp", "superteacher-uploads")
+    : path.join(__dirname, "../../uploads");
+
 // Ensure uploads directory exists
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });

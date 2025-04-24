@@ -2,6 +2,9 @@ import express from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
 import chatRoutes from "./routes/chatRoutes";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 // Create Express app
 const app = express();
@@ -14,9 +17,61 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Routes
 app.use("/api", chatRoutes);
 
-// Health check endpoint
+// Enhanced health check endpoint with diagnostics
 app.get("/health", (_req: express.Request, res: express.Response) => {
-  res.status(200).json({ status: "ok" });
+  try {
+    // Check if tmp directory is writable
+    const tmpDir = os.tmpdir();
+    const testFile = path.join(tmpDir, `test-${Date.now()}.txt`);
+    fs.writeFileSync(testFile, "test", "utf8");
+    fs.unlinkSync(testFile);
+
+    // Check custom upload directory
+    const uploadDir =
+      process.env.NODE_ENV === "production"
+        ? path.join("/tmp", "superteacher-uploads")
+        : path.join(__dirname, "../uploads");
+
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const uploadTestFile = path.join(uploadDir, `test-${Date.now()}.txt`);
+    fs.writeFileSync(uploadTestFile, "test", "utf8");
+    fs.unlinkSync(uploadTestFile);
+
+    res.status(200).json({
+      status: "ok",
+      environment: process.env.NODE_ENV || "development",
+      timestamp: new Date().toISOString(),
+      fs_access: {
+        tmp_dir: tmpDir,
+        tmp_writable: true,
+        upload_dir: uploadDir,
+        upload_writable: true,
+      },
+      system: {
+        platform: process.platform,
+        arch: process.arch,
+        node_version: process.version,
+      },
+      ocr: {
+        demo_mode:
+          process.env.OCR_DEMO_MODE === "true" ||
+          process.env.NODE_ENV === "production",
+        endpoint:
+          process.env.OCR_ENDPOINT ||
+          "https://grading-api.onrender.com/extract-text",
+      },
+    });
+  } catch (error) {
+    console.error("Health check error:", error);
+    res.status(500).json({
+      status: "error",
+      message: error instanceof Error ? error.message : "Unknown error",
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 // Error handling middleware
