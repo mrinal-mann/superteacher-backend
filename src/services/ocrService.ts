@@ -1,3 +1,5 @@
+// src/services/ocrService.ts - Updated for FastAPI integration
+
 import axios from "axios";
 import fs from "fs";
 import FormData from "form-data";
@@ -16,10 +18,10 @@ class OcrService {
   private enableLogging: boolean;
 
   constructor() {
-    // Primary OCR endpoint configuration
+    // Primary OCR endpoint configuration - update to your FastAPI endpoint
     this.ocrEndpoint =
       process.env.OCR_ENDPOINT ||
-      "https://grading-api.onrender.com/extract-text";
+      "https://grading-api.onrender.com/extract-text"; // Update with your actual URL
 
     // Backup OCR service if available
     this.backupEndpoint = process.env.OCR_BACKUP_ENDPOINT || null;
@@ -304,21 +306,25 @@ class OcrService {
     // Make a POST request with the image URL
     this.logInfo(`Sending image URL to OCR service: ${imageUrl}`);
 
-    const response = await axios.post(
-      endpoint,
-      {
-        image_url: imageUrl,
+    // Log the request payload for debugging
+    const payload = {
+      image_url: imageUrl,
+    };
+    this.logInfo(`Request payload: ${JSON.stringify(payload)}`);
+
+    // Using form-data approach instead of JSON body
+    const form = new FormData();
+    form.append("image_url", imageUrl);
+
+    const response = await axios.post(endpoint, form, {
+      headers: {
+        ...form.getHeaders(),
+        Accept: "application/json",
+        "X-Retry-Count": "0",
       },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "X-Retry-Count": "0",
-        },
-        timeout: 120000, // 2-minute timeout for OCR processing
-        validateStatus: (status) => status === 200, // Only accept 200 status
-      }
-    );
+      timeout: 120000, // 2-minute timeout for OCR processing
+      validateStatus: (status) => status === 200, // Only accept 200 status
+    });
 
     // Validate response
     if (response.data && response.data.extracted_text) {

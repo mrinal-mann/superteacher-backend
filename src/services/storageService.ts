@@ -18,6 +18,10 @@ class StorageService {
       const destination = `uploads/${fileName}`;
 
       console.log(`Uploading file to Firebase Storage: ${destination}`);
+      console.log(`Storage service type: ${typeof storage}`);
+      console.log(
+        `Storage service methods: ${Object.keys(storage).join(", ")}`
+      );
 
       // Upload the file to Firebase Storage
       await storage.upload(filePath, {

@@ -571,10 +571,12 @@ Please let me know how you'd like to proceed.`;
     }
 
     // If at initial state without a question, create a generic one
-    if (session.step === ConversationStep.INITIAL) {
+    if (!session.question) {
+      console.log(
+        `No question found for user ${userId}, setting default question`
+      );
       sessionStore.updateSession(userId, {
         question: "Assessment of student work",
-        step: ConversationStep.WAITING_FOR_ANSWER,
       });
     }
 
@@ -591,10 +593,26 @@ Please let me know how you'd like to proceed.`;
       console.log(`Successfully extracted OCR text (${ocrText.length} chars)`);
 
       // Update session with the extracted text
-      sessionStore.updateSession(userId, {
+      const updatedSession = sessionStore.updateSession(userId, {
         studentAnswer: ocrText,
         step: ConversationStep.WAITING_FOR_INSTRUCTION,
       });
+
+      // Double-check that question exists
+      if (!updatedSession.question) {
+        console.log(
+          `Still no question after updating session, explicitly setting one`
+        );
+        sessionStore.updateSession(userId, {
+          question: "Assessment of student work",
+        });
+      }
+
+      // Log the current state for debugging
+      const finalSession = sessionStore.getSession(userId);
+      console.log(
+        `Final session state - Question: ${!!finalSession?.question}, Answer: ${!!finalSession?.studentAnswer}`
+      );
 
       // Analyze the text content for better response
       const contentType = this.analyzeContentType(
@@ -746,11 +764,28 @@ Here's what I extracted:
     );
 
     // Validate we have the necessary data
-    if (!session.question || !session.studentAnswer) {
+    if (!session.studentAnswer) {
       console.log(
-        `Missing data for grading. Question: ${!!session.question}, Answer: ${!!session.studentAnswer}`
+        `Missing student answer for grading. Question: ${!!session.question}, Answer: ${!!session.studentAnswer}`
       );
-      return "I'm missing some information needed for grading. Could you please upload the student's work again?";
+      return "I'm missing the student's work. Could you please upload the student's work again?";
+    }
+
+    // If question is missing but we have the student answer, create a generic question
+    if (!session.question && session.studentAnswer) {
+      console.log(
+        `Question missing but student answer available. Creating generic question for grading.`
+      );
+      sessionStore.updateSession(userId, {
+        question: "Assessment of student work",
+      });
+      // Reload the session data
+      const updatedSession = sessionStore.getSession(userId);
+      if (updatedSession) {
+        console.log(
+          `Updated session with generic question: "${updatedSession.question}"`
+        );
+      }
     }
 
     try {
@@ -780,7 +815,7 @@ Here's what I extracted:
       // Call AI service to grade the answer
       console.log(`Sending to AI for grading...`);
       const gradingResult = await openaiService.gradeAnswer(
-        session.question,
+        session.question || "Assessment of student work",
         session.studentAnswer,
         instruction,
         marks

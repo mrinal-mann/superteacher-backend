@@ -49,6 +49,41 @@ Use multipart/form-data with:
 - `userId`: (Optional) user identifier
 - `message`: (Optional) accompanying text message
 
+## Testing with Postman
+
+### Testing Direct Image Upload
+
+1. Create a new POST request to `http://localhost:3001/api/chat`
+2. Select the "Body" tab and choose "form-data"
+3. Add the following keys:
+   - Key: `image` (type: File) - select an image file from your computer
+   - Key: `userId` (type: Text) - enter any string ID like "test-user-123" (optional)
+4. Click "Send" to upload the image and receive the OCR results
+
+### Testing with Image URL
+
+1. Create a new POST request to `http://localhost:3001/api/chat`
+2. Select the "Body" tab and choose "raw" with "JSON" format
+3. Enter the following JSON:
+   ```json
+   {
+     "image_url": "https://example.com/your-image.jpg",
+     "userId": "test-user-123"
+   }
+   ```
+4. Click "Send" to process the image URL directly
+
+### Testing the OCR Endpoint Directly
+
+If you need to test the OCR endpoint directly:
+
+1. Create a new POST request to `https://grading-api.onrender.com/extract-text`
+2. Select the "Body" tab and choose "form-data"
+3. Add a key: `image_url` (type: Text) with the URL of your image
+4. Click "Send" to verify the OCR extraction independently
+
+**Note**: The OCR service expects the `image_url` parameter in form-data format, not as JSON.
+
 ## Environment Configuration
 
 Key environment variables:
