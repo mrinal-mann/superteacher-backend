@@ -8,7 +8,7 @@ const apiKey = process.env.OPENAI_API_KEY || "your-api-key";
 // Use gpt-3.5-turbo as it's more widely available
 export const OPENAI_CONFIG = {
   apiKey,
-  model: "gpt-4o-mini",
-  maxTokens: 1000,
+  model: "gpt-4o",
+  maxTokens: 3000,
   temperature: 0.1,
 };

@@ -425,49 +425,299 @@ export class CbseChatService extends ChatService {
   }
 
   /**
-   * Extract questions and their marks from OCR text
+   * Enhanced function to extract questions and their marks from OCR text
+   * Handles various CBSE question paper formats across different subjects
    */
   private extractQuestionMarks(
     ocrText: string,
     _subjectArea: SubjectArea | null
   ): Map<number, number> {
+    console.log("Extracting question marks from OCR text");
     const questionMarks = new Map<number, number>();
     const lines = ocrText.split("\n");
 
-    // Regex patterns to identify questions and marks
-    const questionPattern =
-      /\b(?:question|q)\s*\.?\s*(\d+)(?:[a-z])?\s*(?:\(|:|\.|\)|-|=)?\s*(?:\((\d+)(?:\s*marks?)?\)|\[(\d+)(?:\s*marks?)?\]|(\d+)(?:\s*marks?))/i;
-    const marksPattern = /\((\d+)\s*marks?\)/i;
-
-    for (const line of lines) {
-      // Look for question numbers with marks in same line
-      const questionMatch = line.match(questionPattern);
-      if (questionMatch) {
-        const questionNumber = parseInt(questionMatch[1], 10);
-        // Find the marks - could be in group 2, 3, or 4 depending on format
-        const marks = parseInt(
-          questionMatch[2] || questionMatch[3] || questionMatch[4],
+    // First, look for the total marks (MM) in the header
+    let totalMarksInHeader = 0;
+    const mmPattern =
+      /MM:\s*(\d+)|Maximum\s+Marks\s*:?\s*(\d+)|MM\s*(\d+)|Total\s+Marks\s*:?\s*(\d+)/i;
+    for (let i = 0; i < Math.min(15, lines.length); i++) {
+      const mmMatch = lines[i].match(mmPattern);
+      if (mmMatch) {
+        totalMarksInHeader = parseInt(
+          mmMatch[1] || mmMatch[2] || mmMatch[3] || mmMatch[4],
           10
         );
+        console.log(`Total marks found in header: ${totalMarksInHeader}`);
+        break;
+      }
+    }
 
-        if (!isNaN(questionNumber) && !isNaN(marks)) {
-          questionMarks.set(questionNumber, marks);
-          continue;
+    // Look for mark distribution information
+    const markDistributions = [];
+    for (let i = 0; i < Math.min(20, lines.length); i++) {
+      // Look for patterns like "5 questions of 2 marks each"
+      const distributionMatch = lines[i].match(
+        /(\d+)\s*questions?\s*of\s*(\d+)\s*marks?\s*each/i
+      );
+      if (distributionMatch) {
+        markDistributions.push({
+          count: parseInt(distributionMatch[1], 10),
+          marks: parseInt(distributionMatch[2], 10),
+        });
+        console.log(
+          `Found mark distribution: ${distributionMatch[1]} questions of ${distributionMatch[2]} marks each`
+        );
+      }
+    }
+
+    // First approach: Check for tabular format with separate MARKS column
+    let hasMarksColumn = false;
+    let marksColumnIndex = -1;
+
+    // Look for "MARKS" column header
+    for (let i = 0; i < Math.min(20, lines.length); i++) {
+      const marksHeaderIndex = lines[i].toUpperCase().indexOf("MARKS");
+      if (marksHeaderIndex > 0) {
+        hasMarksColumn = true;
+        marksColumnIndex = marksHeaderIndex;
+        console.log(`Found MARKS column at position ${marksColumnIndex}`);
+        break;
+      }
+    }
+
+    if (hasMarksColumn) {
+      // Process as tabular format
+      console.log("Processing question paper in tabular format");
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        // Look for question number pattern at start of line
+        const qNumberMatch = line.match(
+          /^(?:\s*|\s*Q\.?\s*|\s*Question\s+)(\d+)/i
+        );
+        if (qNumberMatch) {
+          const questionNumber = parseInt(qNumberMatch[1], 10);
+
+          // Look for marks in the marks column position
+          let marksValue = 0;
+          if (line.length > marksColumnIndex) {
+            const marksSection = line.substring(marksColumnIndex).trim();
+            const marksMatch = marksSection.match(/^(\d+)/);
+            if (marksMatch) {
+              marksValue = parseInt(marksMatch[1], 10);
+            }
+          }
+
+          // If we found both a question number and marks, store them
+          if (questionNumber > 0 && marksValue > 0) {
+            questionMarks.set(questionNumber, marksValue);
+            console.log(
+              `Extracted from table: Question ${questionNumber} = ${marksValue} marks`
+            );
+          }
+        }
+      }
+    }
+
+    // Second approach: Look for questions and marks in various formats
+    console.log("Processing with general patterns");
+    let currentQuestion = 0;
+
+    // Define various patterns to identify questions and marks
+    const questionPatterns = [
+      /Q\.No\.\s*(\d+)/i, // Q.No. 1
+      /Question\s*(\d+)/i, // Question 1
+      /Q\s*\.?\s*(\d+)/i, // Q.1 or Q 1
+      /^(\d+)\s*\.\s/i, // 1. (at start of line)
+      /^(\d+)\s+/i, // 1 (at start of line followed by space)
+    ];
+
+    const marksPatterns = [
+      /\[(\d+)\s*marks?\]/i, // [5 marks]
+      /\((\d+)\s*marks?\)/i, // (5 marks)
+      /(\d+)\s*marks?$/i, // 5 marks (at end of line)
+      /^(\d+)$/i, // Just the digit (in marks column)
+      /(\d+)\s*m\b/i, // 5m (shorthand)
+    ];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // Skip empty lines and lines containing only "Or"
+      if (line.length === 0 || /^Or$/i.test(line)) continue;
+
+      // Try to find question numbers
+      let questionFound = false;
+      for (const pattern of questionPatterns) {
+        const match = line.match(pattern);
+        if (match) {
+          const questionNumber = parseInt(match[1], 10);
+          if (!isNaN(questionNumber)) {
+            currentQuestion = questionNumber;
+            questionFound = true;
+            break;
+          }
         }
       }
 
-      // Look for standalone marks pattern if no combined pattern found
-      const qNumMatch = line.match(
-        /\b(?:question|q)\s*\.?\s*(\d+)(?:[a-z])?\s*(?:\(|:|\.|\)|-|=)?/i
+      // If we found a question number, look for marks
+      if (questionFound) {
+        let marksFound = false;
+
+        // First look in the current line
+        for (const pattern of marksPatterns) {
+          const match = line.match(pattern);
+          if (match) {
+            const marks = parseInt(match[1], 10);
+            if (!isNaN(marks) && marks > 0) {
+              if (!questionMarks.has(currentQuestion)) {
+                questionMarks.set(currentQuestion, marks);
+                console.log(
+                  `Extracted: Question ${currentQuestion} = ${marks} marks`
+                );
+                marksFound = true;
+                break;
+              }
+            }
+          }
+        }
+
+        // If no marks found in current line, check the next line
+        if (!marksFound && i + 1 < lines.length) {
+          const nextLine = lines[i + 1].trim();
+          for (const pattern of marksPatterns) {
+            const match = nextLine.match(pattern);
+            if (match) {
+              const marks = parseInt(match[1], 10);
+              if (!isNaN(marks) && marks > 0) {
+                if (!questionMarks.has(currentQuestion)) {
+                  questionMarks.set(currentQuestion, marks);
+                  console.log(
+                    `Extracted from next line: Question ${currentQuestion} = ${marks} marks`
+                  );
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // If we have mark distribution info but missing questions, try to fill them in
+    if (
+      markDistributions.length > 0 &&
+      questionMarks.size < totalMarksInHeader
+    ) {
+      console.log("Using mark distribution to fill in missing questions");
+
+      // Sort questions to process them in order
+      const sortedQuestions = Array.from(questionMarks.keys()).sort(
+        (a, b) => a - b
       );
-      const marksMatch = line.match(marksPattern);
 
-      if (qNumMatch && marksMatch) {
-        const questionNumber = parseInt(qNumMatch[1], 10);
-        const marks = parseInt(marksMatch[1], 10);
+      // Find the highest question number
+      const highestQuestion =
+        sortedQuestions.length > 0
+          ? sortedQuestions[sortedQuestions.length - 1]
+          : 0;
 
-        if (!isNaN(questionNumber) && !isNaN(marks)) {
+      // Fill in missing questions based on distribution patterns
+      let questionIndex = 1;
+
+      for (const distribution of markDistributions) {
+        for (let i = 0; i < distribution.count; i++) {
+          if (
+            questionIndex <= highestQuestion &&
+            !questionMarks.has(questionIndex)
+          ) {
+            questionMarks.set(questionIndex, distribution.marks);
+            console.log(
+              `Filled missing Question ${questionIndex} with ${distribution.marks} marks based on distribution`
+            );
+          }
+          questionIndex++;
+        }
+      }
+    }
+
+    // Detect and handle section-based question papers (common in CBSE)
+    // Look for sections like "SECTION A", "SECTION B", etc.
+    const sectionPattern = /SECTION\s+([A-Z])/i;
+    const sectionMarks = new Map<string, number>();
+
+    for (let i = 0; i < lines.length; i++) {
+      const sectionMatch = lines[i].match(sectionPattern);
+      if (sectionMatch) {
+        const section = sectionMatch[1].toUpperCase();
+
+        // Try to find marks for this section in the next few lines
+        for (let j = i; j < Math.min(i + 5, lines.length); j++) {
+          const marksMatch = lines[j].match(/(\d+)\s*marks?/i);
+          if (marksMatch) {
+            sectionMarks.set(section, parseInt(marksMatch[1], 10));
+            console.log(`Found Section ${section} with ${marksMatch[1]} marks`);
+            break;
+          }
+        }
+      }
+    }
+
+    // Verify and validate the extracted question marks
+    console.log("Validating extracted question marks");
+
+    // Calculate total of extracted marks
+    const totalExtractedMarks = Array.from(questionMarks.values()).reduce(
+      (sum, marks) => sum + marks,
+      0
+    );
+    console.log(`Total extracted marks: ${totalExtractedMarks}`);
+
+    // Compare with header total if available
+    if (totalMarksInHeader > 0 && totalExtractedMarks > 0) {
+      if (totalMarksInHeader !== totalExtractedMarks) {
+        console.log(
+          `Warning: Total marks in header (${totalMarksInHeader}) doesn't match extracted total (${totalExtractedMarks})`
+        );
+
+        // If the difference is significant, we may need to adjust
+        if (Math.abs(totalMarksInHeader - totalExtractedMarks) > 5) {
+          console.log(
+            "Large discrepancy detected, extraction may be incomplete"
+          );
+        }
+      } else {
+        console.log("Total marks match header, extraction likely complete");
+      }
+    }
+
+    // If no marks were found at all, try one more approach with very lenient patterns
+    if (questionMarks.size === 0) {
+      console.log(
+        "No marks found with standard patterns, trying fallback approach"
+      );
+
+      // Simply look for patterns like "1. ... 2" anywhere in the text
+      const fallbackPattern =
+        /(\d+)\s*\.\s+.{10,100}?\s+(\d+)\s*(?:marks?|m)?/g;
+      let match;
+
+      const fullText = lines.join(" ");
+      while ((match = fallbackPattern.exec(fullText)) !== null) {
+        const questionNumber = parseInt(match[1], 10);
+        const marks = parseInt(match[2], 10);
+
+        if (
+          !isNaN(questionNumber) &&
+          !isNaN(marks) &&
+          questionNumber > 0 &&
+          marks > 0 &&
+          marks <= 20
+        ) {
           questionMarks.set(questionNumber, marks);
+          console.log(
+            `Fallback extraction: Question ${questionNumber} = ${marks} marks`
+          );
         }
       }
     }

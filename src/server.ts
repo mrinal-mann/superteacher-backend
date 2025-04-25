@@ -20,10 +20,10 @@ const cbseChatService = new CbseChatService();
 console.log("CBSE Grading Assistant initialized successfully");
 
 // Start the server
-app.listen(PORT, () => {
-  console.log(`CBSE Grading Assistant server is running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`CBSE Grading API: http://localhost:${PORT}/api/chat`);
+app.listen(3000, () => {
+  console.log(`CBSE Grading Assistant server is running on port ${3000}`);
+  console.log(`Health check: http://localhost:${3000}/health`);
+  console.log(`CBSE Grading API: http://localhost:${3000}/api/chat`);
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
 });
 
