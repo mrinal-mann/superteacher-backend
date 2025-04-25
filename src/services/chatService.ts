@@ -11,7 +11,7 @@ import { ocrService } from "./ocrService";
 import { openaiService } from "./openaiService";
 import { storageService } from "./storageService";
 
-class ChatService {
+class chatService {
   /**
    * Get or initialize a session for a user ID
    */
@@ -1190,4 +1190,4 @@ ${result.feedback}
   }
 }
 
-export const chatService = new ChatService();
+export const ChatService = new chatService();
