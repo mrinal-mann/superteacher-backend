@@ -11,7 +11,7 @@ import { ocrService } from "./ocrService";
 import { openaiService } from "./openaiService";
 import { storageService } from "./storageService";
 
-class chatService {
+export class ChatService {
   /**
    * Get or initialize a session for a user ID
    */
@@ -90,7 +90,10 @@ class chatService {
   /**
    * Detect user intent from message and session context
    */
-  private detectUserIntent(message: string, session: SessionData): UserIntent {
+  protected detectUserIntent(
+    message: string,
+    session: SessionData
+  ): UserIntent {
     const lowerMsg = message.toLowerCase().trim();
 
     // Check for greetings or help requests
@@ -1190,4 +1193,4 @@ ${result.feedback}
   }
 }
 
-export const ChatService = new chatService();
+export const chatService = new ChatService(); // lowercase object, uppercase class

@@ -283,6 +283,29 @@ ASSESSMENT CONTEXT:
 - The teacher has shared this student's work seeking your professional assessment
 - Respond as a thoughtful, experienced educator would
 `;
+    if (subjectArea === SubjectArea.ECONOMICS) {
+      systemPrompt += `
+SUBJECT EXPERTISE - ECONOMICS (CBSE):
+- You're experienced with CBSE economics curriculum standards and marking schemes
+- You can evaluate understanding of economic concepts, theories and models
+- You can assess proper use of economic terminology and diagrams 
+- You understand how to evaluate application of economic principles to real-world scenarios
+- You can identify common misconceptions in economic understanding
+`;
+    }
+
+    // Add CBSE grading approach
+    if (gradingApproach === GradingApproach.CBSE_STANDARD) {
+      systemPrompt += `
+GRADING APPROACH - CBSE STANDARD:
+- Follow CBSE marking scheme guidelines precisely
+- Award full marks for complete explanations of required concepts
+- Award partial marks for partial understanding based on CBSE guidelines
+- Evaluate both conceptual clarity and application skills
+- Check for proper economic terminology and diagram accuracy
+- Consider overall structure and organization of the answer
+`;
+    }
 
     // Add subject-specific expertise to system prompt
     switch (subjectArea) {

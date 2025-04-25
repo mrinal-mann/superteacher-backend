@@ -24,10 +24,10 @@ export class CbseChatService extends ChatService {
    * Get or initialize a session for a user ID with CBSE-specific data
    */
   getOrCreateSession(userId: string): CbseSessionData {
-    const existingSession = sessionStore.getSession(userId);
+    const existingSession = sessionStore.getSession(userId) as CbseSessionData;
 
-    if (!existingSession) {
-      // Create a new session if none exists
+    // For new sessions, add CBSE-specific fields
+    if (!existingSession.classLevel) {
       return sessionStore.updateSession(userId, {
         question: null,
         studentAnswer: null,
@@ -56,7 +56,7 @@ export class CbseChatService extends ChatService {
    * Detect user intent for CBSE-specific flow
    * Overrides the parent method to add CBSE-specific intent detection
    */
-  private detectUserIntent(
+  protected detectUserIntent(
     message: string,
     session: CbseSessionData
   ): UserIntent {
@@ -429,7 +429,7 @@ export class CbseChatService extends ChatService {
    */
   private extractQuestionMarks(
     ocrText: string,
-    subjectArea: SubjectArea | null
+    _subjectArea: SubjectArea | null
   ): Map<number, number> {
     const questionMarks = new Map<number, number>();
     const lines = ocrText.split("\n");
@@ -805,7 +805,7 @@ export class CbseChatService extends ChatService {
   private getFallbackCbseGrading(
     studentAnswer: string,
     totalMarks: number,
-    questionPaper: string,
+    _questionPaper: string,
     subjectArea: SubjectArea | null
   ): GradingResult {
     // Similar to the original fallback but with CBSE-specific fields
@@ -824,8 +824,8 @@ export class CbseChatService extends ChatService {
     );
 
     // Generate subject-specific feedback
-    let subjectSpecificStrengths = [];
-    let subjectSpecificAreas = [];
+    let subjectSpecificStrengths: string[] = [];
+    let subjectSpecificAreas: string[] = [];
 
     if (subjectArea === SubjectArea.ECONOMICS) {
       subjectSpecificStrengths = [
@@ -890,6 +890,7 @@ export class CbseChatService extends ChatService {
       critical_thinking: Math.round((scorePercentage * 0.6) / 10),
       organization: Math.round((scorePercentage * 0.7) / 10),
       language_use: Math.round((scorePercentage * 0.65) / 10),
+      concept_application: Math.round((scorePercentage * 0.5) / 10),
     };
   }
 
