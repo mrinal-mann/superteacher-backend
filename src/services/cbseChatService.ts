@@ -420,8 +420,6 @@ Your response should feel like a natural conversation with a knowledgeable colle
     userId: string,
     imageUrl: string
   ): Promise<string> {
-    const session = this.getOrCreateSession(userId);
-
     // Update session state
     sessionStore.updateSession(userId, {
       originalImage: imageUrl,
