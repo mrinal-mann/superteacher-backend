@@ -154,6 +154,7 @@ export interface GradingResult {
   diagramScore?: number; // CBSE: Score for diagrams
   applicationScore?: number; // CBSE: Score for application of theories
   terminologyScore?: number; // CBSE: Score for use of terminology
+  is_relevant?: boolean; // CBSE: Whether the answer is relevant to the question
 }
 
 // Enhanced OpenAI/LLM response structure

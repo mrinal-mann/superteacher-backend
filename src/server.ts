@@ -1,4 +1,4 @@
-// src/server.ts - Custom implementation for CBSE Grading Assistant
+// src/server.ts - Updated for CBSE Grading Assistant
 import app from "./app";
 import dotenv from "dotenv";
 import { CbseChatService } from "./services/cbseChatService";
@@ -15,6 +15,7 @@ console.log("Initializing CBSE Grading Assistant...");
 export const cbseChatService = new CbseChatService();
 (global as any).chatService = cbseChatService;
 console.log("CBSE Grading Assistant initialized successfully");
+
 // Start the server
 app.listen(3000, () => {
   console.log(`CBSE Grading Assistant server is running on port ${3000}`);

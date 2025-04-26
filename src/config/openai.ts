@@ -9,6 +9,6 @@ const apiKey = process.env.OPENAI_API_KEY || "your-api-key";
 export const OPENAI_CONFIG = {
   apiKey,
   model: "gpt-4o",
-  maxTokens: 3000,
-  temperature: 0.1,
+  maxTokens: 2000,
+  temperature: 0.7,
 };

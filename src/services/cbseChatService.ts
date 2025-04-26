@@ -1,29 +1,23 @@
-// src/services/enhancedCbseChatService.ts
+// src/services/cbseChatService.ts
 import {
   ConversationStep,
-  SessionData,
   GradingResult,
-  UserIntent,
   SubjectArea,
   ClassLevel,
   CbseSessionData,
   GradingApproach,
 } from "../types";
 import { sessionStore } from "../utils/sessionStore";
-import { ocrService } from "./ocrService";
 import { openaiService } from "./openaiService";
 import { storageService } from "./storageService";
-import { ChatService } from "./chatService";
 
 /**
- * Enhanced ChatService with CBSE-specific grading flow that maintains
- * a conversational, natural dialogue with users while guiding them through
- * the CBSE grading workflow.
+ * CBSE-specific ChatService with natural conversational flow
+ * that guides the user through the CBSE grading workflow.
  */
-export class EnhancedCbseChatService extends ChatService {
+export class CbseChatService {
   /**
    * Get or initialize a session for a user ID with CBSE-specific data
-   * and conversation history for memory
    */
   getOrCreateSession(userId: string): CbseSessionData {
     const existingSession = sessionStore.getSession(userId) as CbseSessionData;
@@ -89,9 +83,11 @@ export class EnhancedCbseChatService extends ChatService {
   ): Promise<void> {
     // Extract class level if present in message
     const classLevel = this.extractClassLevel(message);
-    if (classLevel && 
-       (session.step === ConversationStep.INITIAL || 
-        session.step === ConversationStep.WAITING_FOR_CLASS)) {
+    if (
+      classLevel &&
+      (session.step === ConversationStep.INITIAL ||
+        session.step === ConversationStep.WAITING_FOR_CLASS)
+    ) {
       console.log(`Extracted class level: ${classLevel}`);
       sessionStore.updateSession(userId, {
         classLevel,
@@ -101,9 +97,11 @@ export class EnhancedCbseChatService extends ChatService {
 
     // Extract subject if present in message
     const subjectArea = this.extractSubjectArea(message);
-    if (subjectArea && 
-       (session.step === ConversationStep.WAITING_FOR_SUBJECT || 
-        (session.step === ConversationStep.INITIAL && classLevel))) {
+    if (
+      subjectArea &&
+      (session.step === ConversationStep.WAITING_FOR_SUBJECT ||
+        (session.step === ConversationStep.INITIAL && classLevel))
+    ) {
       console.log(`Extracted subject: ${subjectArea}`);
       sessionStore.updateSession(userId, {
         subjectArea,
@@ -114,19 +112,23 @@ export class EnhancedCbseChatService extends ChatService {
     // Handle marks confirmation
     const lowerMsg = message.toLowerCase().trim();
     if (session.step === ConversationStep.WAITING_FOR_MARKS_CONFIRMATION) {
-      if (lowerMsg.includes("yes") || 
-          lowerMsg.includes("correct") || 
-          lowerMsg.includes("right") || 
-          lowerMsg.includes("good")) {
+      if (
+        lowerMsg.includes("yes") ||
+        lowerMsg.includes("correct") ||
+        lowerMsg.includes("right") ||
+        lowerMsg.includes("good")
+      ) {
         console.log("Marks confirmed");
         sessionStore.updateSession(userId, {
           isMarkingConfirmed: true,
           step: ConversationStep.WAITING_FOR_STUDENT_ANSWER,
         });
-      } else if (lowerMsg.includes("no") || 
-                lowerMsg.includes("incorrect") || 
-                lowerMsg.includes("wrong") || 
-                lowerMsg.includes("not right")) {
+      } else if (
+        lowerMsg.includes("no") ||
+        lowerMsg.includes("incorrect") ||
+        lowerMsg.includes("wrong") ||
+        lowerMsg.includes("not right")
+      ) {
         console.log("Marks correction needed");
         sessionStore.updateSession(userId, {
           step: ConversationStep.WAITING_FOR_MARKS_UPDATE,
@@ -136,18 +138,21 @@ export class EnhancedCbseChatService extends ChatService {
 
     // Handle marks update requests
     if (session.step === ConversationStep.WAITING_FOR_MARKS_UPDATE) {
-      const updatePattern = /(?:question|q)\s*\.?\s*(\d+)(?:[a-z])?\s*(?:should|to|is|has|have|update|change|set)\s*(?:be|have|to)?\s*(\d+)\s*(?:mark|marks)?/i;
+      const updatePattern =
+        /(?:question|q)\s*\.?\s*(\d+)(?:[a-z])?\s*(?:should|to|is|has|have|update|change|set)\s*(?:be|have|to)?\s*(\d+)\s*(?:mark|marks)?/i;
       const match = message.match(updatePattern);
-      
+
       if (match && session.questionMarks) {
         const questionNumber = parseInt(match[1], 10);
         const newMarks = parseInt(match[2], 10);
-        
-        console.log(`Updating marks for question ${questionNumber} to ${newMarks}`);
-        
+
+        console.log(
+          `Updating marks for question ${questionNumber} to ${newMarks}`
+        );
+
         // Update the question marks
         session.questionMarks.set(questionNumber, newMarks);
-        
+
         // Move back to confirmation state
         sessionStore.updateSession(userId, {
           questionMarks: session.questionMarks,
@@ -162,11 +167,13 @@ export class EnhancedCbseChatService extends ChatService {
       sessionStore.updateSession(userId, {
         step: ConversationStep.WAITING_FOR_CLASS,
       });
-    } else if (lowerMsg.includes("start over") || 
-              lowerMsg.includes("restart") || 
-              lowerMsg.includes("reset") || 
-              lowerMsg.includes("new session") || 
-              lowerMsg.includes("another paper")) {
+    } else if (
+      lowerMsg.includes("start over") ||
+      lowerMsg.includes("restart") ||
+      lowerMsg.includes("reset") ||
+      lowerMsg.includes("new session") ||
+      lowerMsg.includes("another paper")
+    ) {
       console.log("Starting new session");
       sessionStore.resetSession(userId);
       sessionStore.updateSession(userId, {
@@ -176,9 +183,11 @@ export class EnhancedCbseChatService extends ChatService {
     }
 
     // Always record that we've updated the session after intent processing
-    console.log(`Session updated, current state: ${
-      (sessionStore.getSession(userId) as CbseSessionData).step
-    }`);
+    console.log(
+      `Session updated, current state: ${
+        (sessionStore.getSession(userId) as CbseSessionData).step
+      }`
+    );
   }
 
   /**
@@ -186,23 +195,30 @@ export class EnhancedCbseChatService extends ChatService {
    */
   private extractClassLevel(message: string): ClassLevel | null {
     const lowerMsg = message.toLowerCase().trim();
-    
+
     // Check for class level mentions using regex
     const classMatch = lowerMsg.match(/\b(?:class|grade)?\s*(\d+)(?:\s|$|\b)/i);
     if (classMatch) {
       const classNum = parseInt(classMatch[1], 10);
-      
+
       switch (classNum) {
-        case 6: return ClassLevel.CLASS_6;
-        case 7: return ClassLevel.CLASS_7;
-        case 8: return ClassLevel.CLASS_8;
-        case 9: return ClassLevel.CLASS_9;
-        case 10: return ClassLevel.CLASS_10;
-        case 11: return ClassLevel.CLASS_11;
-        case 12: return ClassLevel.CLASS_12;
+        case 6:
+          return ClassLevel.CLASS_6;
+        case 7:
+          return ClassLevel.CLASS_7;
+        case 8:
+          return ClassLevel.CLASS_8;
+        case 9:
+          return ClassLevel.CLASS_9;
+        case 10:
+          return ClassLevel.CLASS_10;
+        case 11:
+          return ClassLevel.CLASS_11;
+        case 12:
+          return ClassLevel.CLASS_12;
       }
     }
-    
+
     return null;
   }
 
@@ -211,7 +227,7 @@ export class EnhancedCbseChatService extends ChatService {
    */
   private extractSubjectArea(message: string): SubjectArea | null {
     const lowerMsg = message.toLowerCase().trim();
-    
+
     if (lowerMsg.includes("math") || lowerMsg.includes("mathematics")) {
       return SubjectArea.MATH;
     } else if (lowerMsg.includes("econ")) {
@@ -222,13 +238,19 @@ export class EnhancedCbseChatService extends ChatService {
       return SubjectArea.ENGLISH;
     } else if (lowerMsg.includes("history")) {
       return SubjectArea.HISTORY;
-    } else if (lowerMsg.includes("social") || lowerMsg.includes("social studies")) {
+    } else if (
+      lowerMsg.includes("social") ||
+      lowerMsg.includes("social studies")
+    ) {
       return SubjectArea.SOCIAL_STUDIES;
     } else if (lowerMsg.includes("business")) {
       return SubjectArea.BUSINESS_STUDIES;
     } else if (lowerMsg.includes("account")) {
       return SubjectArea.ACCOUNTANCY;
-    } else if (lowerMsg.includes("politi") || lowerMsg.includes("political science")) {
+    } else if (
+      lowerMsg.includes("politi") ||
+      lowerMsg.includes("political science")
+    ) {
       return SubjectArea.POLITICAL_SCIENCE;
     } else if (lowerMsg.includes("geo")) {
       return SubjectArea.GEOGRAPHY;
@@ -241,7 +263,7 @@ export class EnhancedCbseChatService extends ChatService {
     } else if (lowerMsg.includes("computer")) {
       return SubjectArea.COMPUTER_SCIENCE;
     }
-    
+
     return null;
   }
 
@@ -254,10 +276,10 @@ export class EnhancedCbseChatService extends ChatService {
     additionalContext: string = ""
   ): Promise<string> {
     const session = this.getOrCreateSession(userId);
-    
+
     // Build conversation history
     const history = session.conversationHistory || [];
-    
+
     // Build a detailed system prompt for the LLM
     const systemPrompt = `
 You are SuperTeacher AI, a CBSE grading assistant that helps teachers grade student papers.
@@ -294,7 +316,7 @@ For Economics subject specifically, show your expertise in CBSE Economics assess
 
 Your response should feel like a natural conversation with a knowledgeable colleague, not a rigid system following steps.
 `;
-    
+
     try {
       // Call OpenAI for a conversational response
       let response = await openaiService.generateConversation(
@@ -302,17 +324,22 @@ Your response should feel like a natural conversation with a knowledgeable colle
         userMessage,
         history
       );
-      
+
       // Add special context for showing marks if needed
-      if (session.step === ConversationStep.WAITING_FOR_MARKS_CONFIRMATION && 
-          session.questionMarks && 
-          session.questionMarks.size > 0) {
+      if (
+        session.step === ConversationStep.WAITING_FOR_MARKS_CONFIRMATION &&
+        session.questionMarks &&
+        session.questionMarks.size > 0
+      ) {
         // Format marks for display
         const formattedMarks = Array.from(session.questionMarks.entries())
           .sort((a, b) => a[0] - b[0])
-          .map(([qNum, marks]) => `Question ${qNum}: ${marks} mark${marks !== 1 ? 's' : ''}`)
-          .join('\n');
-        
+          .map(
+            ([qNum, marks]) =>
+              `Question ${qNum}: ${marks} mark${marks !== 1 ? "s" : ""}`
+          )
+          .join("\n");
+
         // Insert marks information if not already present
         if (!response.includes("Question 1:") && !response.includes("marks")) {
           response = response.replace(
@@ -321,25 +348,25 @@ Your response should feel like a natural conversation with a knowledgeable colle
           );
         }
       }
-      
+
       // Update conversation history
       const updatedHistory = [
         ...history,
         { role: "user", content: userMessage },
-        { role: "assistant", content: response }
+        { role: "assistant", content: response },
       ];
-      
+
       // Keep history at a reasonable size
       const trimmedHistory = updatedHistory.slice(-15);
-      
+
       sessionStore.updateSession(userId, {
-        conversationHistory: trimmedHistory
+        conversationHistory: trimmedHistory,
       });
-      
+
       return response;
     } catch (error) {
       console.error("Error generating conversational response:", error);
-      
+
       // Fallback if OpenAI fails
       return this.getFallbackResponse(session);
     }
@@ -353,28 +380,34 @@ Your response should feel like a natural conversation with a knowledgeable colle
       case ConversationStep.INITIAL:
       case ConversationStep.WAITING_FOR_CLASS:
         return "Welcome to the CBSE Grading Assistant! I'm here to help you grade papers. Could you tell me which class you're grading for?";
-      
+
       case ConversationStep.WAITING_FOR_SUBJECT:
-        return `Great! You're grading for ${session.classLevel?.replace("_", " ").toUpperCase() || "a class"}. What subject are you grading?`;
-      
+        return `Great! You're grading for ${
+          session.classLevel?.replace("_", " ").toUpperCase() || "a class"
+        }. What subject are you grading?`;
+
       case ConversationStep.WAITING_FOR_QUESTION_PAPER:
-        return `Perfect! I'll help you grade ${session.subjectArea?.replace("_", " ") || "your subject"} for ${session.classLevel?.replace("_", " ").toUpperCase() || "your class"}. Could you upload the question paper so I can analyze the questions and marks?`;
-      
+        return `Perfect! I'll help you grade ${
+          session.subjectArea?.replace("_", " ") || "your subject"
+        } for ${
+          session.classLevel?.replace("_", " ").toUpperCase() || "your class"
+        }. Could you upload the question paper so I can analyze the questions and marks?`;
+
       case ConversationStep.WAITING_FOR_MARKS_CONFIRMATION:
         return "I've analyzed the question paper and extracted the marks. Do these look correct to you?";
-      
+
       case ConversationStep.WAITING_FOR_MARKS_UPDATE:
         return "Which question needs marks correction? You can tell me something like 'Question 3 should be 5 marks'.";
-      
+
       case ConversationStep.WAITING_FOR_STUDENT_ANSWER:
         return "Great! Now please upload the student's answer paper so I can grade it according to CBSE standards.";
-      
+
       case ConversationStep.GRADING_IN_PROGRESS:
         return "I'm analyzing the student's answer and preparing a detailed assessment based on CBSE guidelines.";
-      
+
       case ConversationStep.COMPLETE:
         return "I've completed the assessment. Would you like to grade another paper or do you have questions about this grading?";
-      
+
       default:
         return "I'm here to help with CBSE grading. What would you like to do next?";
     }
@@ -383,29 +416,57 @@ Your response should feel like a natural conversation with a knowledgeable colle
   /**
    * Process a question paper URL using GPT-4 Vision
    */
-  async processQuestionPaperUrl(userId: string, imageUrl: string): Promise<string> {
+  async processQuestionPaperUrl(
+    userId: string,
+    imageUrl: string
+  ): Promise<string> {
     const session = this.getOrCreateSession(userId);
-    
+    console.log(`Processing student answer from URL for user ${userId}`);
+
+    // Ensure we have question paper and marks first
+    if (
+      !session.questionPaper ||
+      !session.questionMarks ||
+      !session.isMarkingConfirmed
+    ) {
+      return await this.generateConversationalResponse(
+        userId,
+        "I've uploaded a student answer",
+        "The user has uploaded a student answer, but we don't have the question paper or confirmed marks yet. Gently remind them that we need to complete those steps first."
+      );
+    }
     // Update session state
     sessionStore.updateSession(userId, {
       originalImage: imageUrl,
-      step: ConversationStep.PROCESSING_QUESTION_PAPER,
+      step: ConversationStep.GRADING_IN_PROGRESS,
     });
 
     // Use GPT-4 Vision to extract and analyze the question paper
     const analysisPrompt = `
-You are analyzing a CBSE question paper.
-1. Extract all text exactly as it appears.
-2. Identify all questions and their marks.
-3. Pay special attention to the question numbers and marks allocated to each question.
-4. Look for any text marked "MM" or "Maximum Marks" to find the total marks.
+You are analyzing a student's handwritten answer to a CBSE ${session.subjectArea} exam.
+Extract all text from this student's answer exactly as it appears, preserving formatting as much as possible.
+
+Pay special attention to:
+1. Carefully read the handwritten text, even if it's difficult to decipher
+2. Maintain the original structure and organization of the answer
+3. Any diagrams or figures (describe them briefly where they appear)
+4. Mathematical formulas or equations (if present)
+5. Numbered points or sections in the answer
+6. Pay close attention to technical terminology related to ${session.subjectArea}
+
+If parts of the text are unclear, indicate this with [unclear] rather than guessing.
 `;
 
     try {
       // Extract text and analyze it in one step
-      const ocrText = await openaiService.analyzeImage(imageUrl, analysisPrompt);
-      console.log(`Extracted and analyzed question paper text: ${ocrText.length} chars`);
-      
+      const ocrText = await openaiService.analyzeImage(
+        imageUrl,
+        analysisPrompt
+      );
+      console.log(
+        `Extracted and analyzed question paper text: ${ocrText.length} chars`
+      );
+
       // Update session with the text
       sessionStore.updateSession(userId, {
         questionPaper: ocrText,
@@ -429,61 +490,73 @@ Return ONLY valid JSON without explanation.
 `;
 
       const structuredData = await openaiService.generateText(structurePrompt);
-      
+
       try {
         // Parse the structured data
         const parsedData = JSON.parse(structuredData);
-        
+
         // Convert to question marks map
         const questionMarks = new Map<number, number>();
         const questionText = new Map<number, string>();
-        
-        parsedData.questions.forEach(q => {
-          questionMarks.set(q.number, q.marks);
-          questionText.set(q.number, q.text);
-        });
-        
+
+        parsedData.questions.forEach(
+          (q: { number: number; text: string; marks: number }) => {
+            questionMarks.set(q.number, q.marks);
+            questionText.set(q.number, q.text);
+          }
+        );
+
         // Update session with extracted marks
         sessionStore.updateSession(userId, {
           questionMarks,
           step: ConversationStep.WAITING_FOR_MARKS_CONFIRMATION,
         });
-        
+
         // Add additional context with the extracted questions for the response
         const additionalContext = `
-EXTRACTED QUESTIONS AND MARKS:
-${parsedData.questions.map(q => `Question ${q.number}: ${q.text.substring(0, 100)}${q.text.length > 100 ? '...' : ''}\nMarks: ${q.marks}`).join('\n\n')}
+        EXTRACTED QUESTIONS AND MARKS:
+        ${parsedData.questions
+          .map(
+            (q: { number: number; text: string; marks: number }) =>
+              `Question ${q.number}: ${q.text.substring(0, 100)}${
+                q.text.length > 100 ? "..." : ""
+              }\nMarks: ${q.marks}`
+          )
+          .join("\n\n")}
 
-Guide the user to confirm if these extracted marks are correct. If they say yes, update isMarkingConfirmed to true and move to waiting for student answer. If they say no, help them correct the marks.
-`;
-        
+      Guide the user to confirm if these extracted marks are correct. If they say yes, update isMarkingConfirmed to true and move to waiting for student answer. If they say no, help them correct the marks.
+      `;
+
         // Generate a conversational response
         return await this.generateConversationalResponse(
-          userId, 
-          "I've uploaded the question paper", 
+          userId,
+          "I've uploaded the question paper",
           additionalContext
         );
       } catch (error) {
         console.error("Error parsing structured data:", error);
-        
+
         // Fallback to simpler extraction
-        const extractionResult = this.extractQuestionMarks(ocrText, session.subjectArea);
-        
+        const extractionResult = this.extractQuestionMarks(ocrText);
+
         sessionStore.updateSession(userId, {
           questionMarks: extractionResult.marks,
           step: ConversationStep.WAITING_FOR_MARKS_CONFIRMATION,
         });
-        
+
         const additionalContext = `
 I had some trouble structuring the question paper data, but I've extracted the following marks:
 ${Array.from(extractionResult.marks.entries())
   .sort((a, b) => a[0] - b[0])
-  .map(([qNum, marks]) => `Question ${qNum}: ${marks} mark${marks !== 1 ? 's' : ''}`)
-  .join('\n')}
+  .map(
+    ([qNum, marks]) =>
+      `Question ${qNum}: ${marks} mark${marks !== 1 ? "s" : ""}`
+  )
+  .join("\n")}
 
 Ask the user if these marks look correct.
 `;
-        
+
         return await this.generateConversationalResponse(
           userId,
           "I've uploaded the question paper",
@@ -492,24 +565,35 @@ Ask the user if these marks look correct.
       }
     } catch (error) {
       console.error("Error using GPT Vision:", error);
-      
-      // Fall back to standard OCR if Vision API fails
-      return this.fallbackToStandardOcr(userId, imageUrl);
+
+      // Fall back to more generic handling
+      return this.generateConversationalResponse(
+        userId,
+        "I've uploaded the question paper",
+        "I had trouble processing the question paper. Could you please try uploading a clearer image?"
+      );
     }
   }
 
   /**
    * Process student answer from URL using GPT-4 Vision
    */
-  async processStudentAnswerUrl(userId: string, imageUrl: string): Promise<string> {
+  async processStudentAnswerUrl(
+    userId: string,
+    imageUrl: string
+  ): Promise<string> {
     const session = this.getOrCreateSession(userId);
     console.log(`Processing student answer from URL for user ${userId}`);
 
     // Ensure we have question paper and marks first
-    if (!session.questionPaper || !session.questionMarks || !session.isMarkingConfirmed) {
+    if (
+      !session.questionPaper ||
+      !session.questionMarks ||
+      !session.isMarkingConfirmed
+    ) {
       return await this.generateConversationalResponse(
         userId,
-        "I've uploaded a student answer", 
+        "I've uploaded a student answer",
         "The user has uploaded a student answer, but we don't have the question paper or confirmed marks yet. Gently remind them that we need to complete those steps first."
       );
     }
@@ -532,9 +616,14 @@ Pay special attention to:
 4. Numbered points or sections in the answer
 `;
 
-      const studentAnswer = await openaiService.analyzeImage(imageUrl, analysisPrompt);
-      console.log(`Successfully extracted student answer text (${studentAnswer.length} chars)`);
-      
+      const studentAnswer = await openaiService.analyzeImage(
+        imageUrl,
+        analysisPrompt
+      );
+      console.log(
+        `Successfully extracted student answer text (${studentAnswer.length} chars)`
+      );
+
       // Update session with the extracted text
       sessionStore.updateSession(userId, {
         studentAnswer,
@@ -550,8 +639,9 @@ Pay special attention to:
       // Create subject-specific grading instructions
       let subjectSpecificInstructions = "";
       const subjectString = session.subjectArea?.replace("_", " ") || "general";
-      const classString = session.classLevel?.replace("_", " ").toUpperCase() || "";
-      
+      const classString =
+        session.classLevel?.replace("_", " ").toUpperCase() || "";
+
       if (session.subjectArea === SubjectArea.ECONOMICS) {
         subjectSpecificInstructions = `
 For Economics, follow these CBSE guidelines:
@@ -576,36 +666,49 @@ ${studentAnswer}
 
 GRADING INSTRUCTIONS:
 ${subjectSpecificInstructions}
+- VERY IMPORTANT: First check if the student's answer is actually relevant to the questions. If it's completely off-topic or from a different subject, give a score of 0.
 - Grade according to CBSE marking scheme standards
 - Total marks for this answer: ${totalMarks}
 - Allocate marks per question according to the confirmed marks distribution
 - Be fair and consistent in your evaluation
+- Verify that the answer addresses the specific concepts from the question paper
 
 Return your assessment as a valid JSON object with these fields:
 {
-  "score": (a number from 0 to ${totalMarks} representing the total score),
-  "feedback": (professional explanation of the grade with specific examples from the student's work),
-  "strengths": (array of 3-4 specific strengths demonstrated in the work),
+  "score": (a number from 0 to ${totalMarks} representing the total score, give 0 if content is irrelevant to the subject),
+  "feedback": (professional explanation of the grade with specific examples from the student's work, note if content is irrelevant),
+  "strengths": (array of 3-4 specific strengths demonstrated in the work, or ["None"] if completely irrelevant),
   "areas_for_improvement": (array of 3-4 specific areas needing improvement),
   "suggested_points": (array of 2-3 actionable suggestions for improvement),
-  "correct_concepts": (key concepts the student understood correctly),
+  "correct_concepts": (key concepts the student understood correctly, or "None" if irrelevant),
   "misconceptions": (any evident misconceptions in the student's answer),
   "conceptsScore": (a number from 0-10 rating conceptual understanding),
   "diagramScore": (a number from 0-10 rating diagram accuracy if applicable),
   "applicationScore": (a number from 0-10 rating application of theories),
-  "terminologyScore": (a number from 0-10 rating use of terminology)
+  "terminologyScore": (a number from 0-10 rating use of terminology),
+  "is_relevant": (true or false, indicating if the answer is relevant to the subject and question)
 }
 
 Ensure your response is ONLY valid JSON without any additional text.
 `;
-
       console.log(`Sending to AI for grading...`);
-      const gradingResponseText = await openaiService.generateText(gradingPrompt, 0.2);
-      
+      let gradingResponseText = await openaiService.generateText(
+        gradingPrompt,
+        0.2
+      );
+
+      // Clean up JSON if it's wrapped in markdown code blocks
+      if (gradingResponseText.includes("```json")) {
+        gradingResponseText = gradingResponseText.replace(
+          /```json\s*|\s*```/g,
+          ""
+        );
+      }
+
       try {
         // Parse the grading result
         const gradingResult = JSON.parse(gradingResponseText) as GradingResult;
-        
+
         // Add metadata
         gradingResult.outOf = totalMarks;
         gradingResult.percentage = (gradingResult.score / totalMarks) * 100;
@@ -622,8 +725,12 @@ Ensure your response is ONLY valid JSON without any additional text.
         });
 
         // Format the response with CBSE-specific grading
-        const formattedGrading = this.formatCbseGradingResponse(gradingResult, totalMarks, session);
-        
+        const formattedGrading = this.formatCbseGradingResponse(
+          gradingResult,
+          totalMarks,
+          session
+        );
+
         return await this.generateConversationalResponse(
           userId,
           "I've uploaded the student answer",
@@ -635,7 +742,7 @@ Respond conversationally, but make sure to include all the assessment details.`
         );
       } catch (error) {
         console.error("Error parsing grading result:", error);
-        
+
         // Fallback to simple grading
         const fallbackResult = this.getFallbackCbseGrading(
           studentAnswer,
@@ -643,17 +750,21 @@ Respond conversationally, but make sure to include all the assessment details.`
           session.questionPaper || "",
           session.subjectArea
         );
-        
+
         // Update session
         const previousResults = session.previousGradingResults || [];
         sessionStore.updateSession(userId, {
           step: ConversationStep.COMPLETE,
           previousGradingResults: [...previousResults, fallbackResult],
         });
-        
+
         // Format the fallback response
-        const formattedFallback = this.formatCbseGradingResponse(fallbackResult, totalMarks, session);
-        
+        const formattedFallback = this.formatCbseGradingResponse(
+          fallbackResult,
+          totalMarks,
+          session
+        );
+
         return await this.generateConversationalResponse(
           userId,
           "I've uploaded the student answer",
@@ -681,63 +792,6 @@ Respond conversationally while including this assessment.`
   }
 
   /**
-   * Fallback to standard OCR if GPT-4 Vision fails
-   */
-  private async fallbackToStandardOcr(userId: string, imageUrl: string): Promise<string> {
-    const session = this.getOrCreateSession(userId);
-    
-    try {
-      // Extract text using standard OCR
-      console.log("Falling back to standard OCR");
-      const ocrText = await ocrService.extractTextFromImageUrl(imageUrl);
-      
-      // Update session with extracted text
-      sessionStore.updateSession(userId, {
-        questionPaper: ocrText,
-        step: ConversationStep.EXTRACTING_QUESTION_MARKS,
-      });
-      
-      // Extract marks
-      const extractionResult = this.extractQuestionMarks(ocrText, session.subjectArea);
-      
-      // Update session
-      sessionStore.updateSession(userId, {
-        questionMarks: extractionResult.marks,
-        step: ConversationStep.WAITING_FOR_MARKS_CONFIRMATION,
-      });
-      
-      // Generate response
-      return await this.generateConversationalResponse(
-        userId,
-        "I've uploaded the question paper",
-        `I've extracted the following marks:
-        
-${Array.from(extractionResult.marks.entries())
-  .sort((a, b) => a[0] - b[0])
-  .map(([qNum, marks]) => `Question ${qNum}: ${marks} mark${marks !== 1 ? 's' : ''}`)
-  .join('\n')}
-
-Ask the user if these marks look correct.`
-      );
-    } catch (error) {
-      console.error("Fallback OCR also failed:", error);
-      
-      // Reset to appropriate state
-      sessionStore.updateSession(userId, {
-        step: session.step === ConversationStep.WAITING_FOR_QUESTION_PAPER ? 
-          ConversationStep.WAITING_FOR_QUESTION_PAPER : 
-          ConversationStep.WAITING_FOR_STUDENT_ANSWER,
-      });
-      
-      return await this.generateConversationalResponse(
-        userId,
-        "I've uploaded an image",
-        "There was a problem processing the image. Ask the user to try uploading it again with better lighting or clarity."
-      );
-    }
-  }
-  
-  /**
    * Format the grading result with CBSE-specific format but in a more conversational style
    */
   private formatCbseGradingResponse(
@@ -749,33 +803,62 @@ Ask the user if these marks look correct.`
       session.subjectArea?.replace("_", " ").toUpperCase() || "GENERAL";
     const className = session.classLevel?.replace("_", " ").toUpperCase() || "";
 
+    // Add a check for completely irrelevant answers
+    const isRelevant = result.is_relevant !== false && result.score > 0;
+
     let formattedResponse = `
-## CBSE ${className} ${subjectName} ASSESSMENT
+  ## CBSE ${className} ${subjectName} ASSESSMENT
+  `;
 
-🏆 **TOTAL SCORE: ${result.score}/${totalMarks}** (${Math.round(result.percentage)}%)
-
-📝 **EXAMINER'S REMARKS:**
-${result.feedback}
-
-💪 **STRENGTHS:**
-${result.strengths.map((s) => `- ${s}`).join("\n")}
-
-🔍 **AREAS FOR IMPROVEMENT:**
-${result.areas_for_improvement.map((a) => `- ${a}`).join("\n")}
-
-💡 **SUGGESTIONS TO IMPROVE:**
-${result.suggested_points.map((s) => `- ${s}`).join("\n")}
-`;
-
-    // Add economics-specific feedback if applicable
-    if (session.subjectArea === SubjectArea.ECONOMICS) {
+    if (!isRelevant) {
       formattedResponse += `
-📊 **ECONOMICS-SPECIFIC FEEDBACK:**
-- Economic Concepts: ${result.conceptsScore || "Not explicitly evaluated"}/10
-- Diagram Accuracy: ${result.diagramScore || "Not explicitly evaluated"}/10
-- Application of Theories: ${result.applicationScore || "Not explicitly evaluated"}/10
-- Use of Terminology: ${result.terminologyScore || "Not explicitly evaluated"}/10
-`;
+  ⚠️ **IRRELEVANT CONTENT DETECTED**
+  🏆 **TOTAL SCORE: 0/${totalMarks}** (0%)
+  
+  📝 **EXAMINER'S REMARKS:**
+  ${result.feedback}
+  
+  The submitted answer does not address the question/subject matter. The content appears to be related to a different subject or topic entirely.
+  
+  💡 **SUGGESTIONS:**
+  - Please ensure you're answering the correct question
+  - Review the ${subjectName} syllabus and course materials
+  - Practice understanding question requirements before answering
+  `;
+    } else {
+      // Original formatting for relevant answers
+      formattedResponse += `
+  🏆 **TOTAL SCORE: ${result.score}/${totalMarks}** (${Math.round(
+        result.percentage
+      )}%)
+  
+  📝 **EXAMINER'S REMARKS:**
+  ${result.feedback}
+  
+  💪 **STRENGTHS:**
+  ${result.strengths.map((s) => `- ${s}`).join("\n")}
+  
+  🔍 **AREAS FOR IMPROVEMENT:**
+  ${result.areas_for_improvement.map((a) => `- ${a}`).join("\n")}
+  
+  💡 **SUGGESTIONS TO IMPROVE:**
+  ${result.suggested_points.map((s) => `- ${s}`).join("\n")}
+  `;
+
+      // Add economics-specific feedback if applicable
+      if (session.subjectArea === SubjectArea.ECONOMICS) {
+        formattedResponse += `
+  📊 **ECONOMICS-SPECIFIC FEEDBACK:**
+  - Economic Concepts: ${result.conceptsScore || "Not explicitly evaluated"}/10
+  - Diagram Accuracy: ${result.diagramScore || "Not explicitly evaluated"}/10
+  - Application of Theories: ${
+    result.applicationScore || "Not explicitly evaluated"
+  }/10
+  - Use of Terminology: ${
+    result.terminologyScore || "Not explicitly evaluated"
+  }/10
+  `;
+      }
     }
 
     return formattedResponse;
@@ -896,8 +979,133 @@ ${result.suggested_points.map((s) => `- ${s}`).join("\n")}
   }
 
   /**
-   * Process an uploaded image with OCR - overriding parent method for CBSE flow
-   * but with a more conversational approach
+   * Extract questions and their marks from OCR text
+   */
+  private extractQuestionMarks(ocrText: string): {
+    marks: Map<number, number>;
+    questionText: Map<number, string>;
+  } {
+    console.log("Extracting question marks from OCR text");
+    const questionMarks = new Map<number, number>();
+    const questionText = new Map<number, string>();
+    const lines = ocrText.split("\n");
+
+    // Find total marks in header
+    let totalMarksInHeader = 0;
+    const mmPattern =
+      /MM:\s*(\d+)|Maximum\s+Marks\s*:?\s*(\d+)|MM\s*(\d+)|Total\s+Marks\s*:?\s*(\d+)/i;
+    for (let i = 0; i < Math.min(15, lines.length); i++) {
+      const mmMatch = lines[i].match(mmPattern);
+      if (mmMatch) {
+        totalMarksInHeader = parseInt(
+          mmMatch[1] || mmMatch[2] || mmMatch[3] || mmMatch[4],
+          10
+        );
+        console.log(`Total marks found in header: ${totalMarksInHeader}`);
+        break;
+      }
+    }
+
+    // Pattern to find question numbers and marks
+    const questionPattern =
+      /^\s*(\d+)\s*\.\s*(.*?)(?:\s*\[(\d+)\s*(?:marks?|m)\]|\s*\((\d+)\s*(?:marks?|m)\)|\s+(\d+)\s*(?:marks?|m))?$/i;
+
+    let currentQuestionNumber = 0;
+    let currentQuestionText = "";
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.length === 0) continue;
+
+      const questionMatch = line.match(questionPattern);
+      if (questionMatch) {
+        // Save previous question if there was one
+        if (currentQuestionNumber > 0) {
+          questionText.set(currentQuestionNumber, currentQuestionText.trim());
+        }
+
+        // Get new question details
+        currentQuestionNumber = parseInt(questionMatch[1], 10);
+        currentQuestionText = questionMatch[2] || "";
+
+        // Get marks if they're in the question line
+        const marksValue =
+          questionMatch[3] || questionMatch[4] || questionMatch[5];
+        if (marksValue) {
+          questionMarks.set(currentQuestionNumber, parseInt(marksValue, 10));
+        }
+      } else if (currentQuestionNumber > 0) {
+        // This might be a continuation of the current question
+        // Look for marks pattern at the end
+        const marksPattern =
+          /\s*\[(\d+)\s*(?:marks?|m)\]|\s*\((\d+)\s*(?:marks?|m)\)|\s+(\d+)\s*(?:marks?|m)$/i;
+        const marksMatch = line.match(marksPattern);
+
+        if (marksMatch && !questionMarks.has(currentQuestionNumber)) {
+          const marksValue = marksMatch[1] || marksMatch[2] || marksMatch[3];
+          questionMarks.set(currentQuestionNumber, parseInt(marksValue, 10));
+          currentQuestionText += " " + line.replace(marksPattern, "");
+        } else {
+          currentQuestionText += " " + line;
+        }
+      }
+    }
+
+    // Save the last question
+    if (currentQuestionNumber > 0) {
+      questionText.set(currentQuestionNumber, currentQuestionText.trim());
+    }
+
+    // Special case for Economics papers that often follow a standard format
+    if (totalMarksInHeader === 40 && questionMarks.size === 0) {
+      console.log(
+        "Applying special case for CBSE Economics paper with 40 marks"
+      );
+
+      // Check if the extracted questions match the standard format
+      // Standard format: Questions 1-5 (2 marks each), 6-10 (3 marks each), 11-13 (5 marks each)
+
+      if (questionText.has(1) && (questionText.has(5) || questionText.has(6))) {
+        // Apply the standard distribution: first set of questions (usually 1-5) at 2 marks each
+        for (let q = 1; q <= 5; q++) {
+          if (questionText.has(q)) {
+            questionMarks.set(q, 2);
+          }
+        }
+      }
+
+      if (
+        questionText.has(6) &&
+        (questionText.has(10) || questionText.has(11))
+      ) {
+        // Apply the standard distribution: second set of questions (usually 6-10) at 3 marks each
+        for (let q = 6; q <= 10; q++) {
+          if (questionText.has(q)) {
+            questionMarks.set(q, 3);
+          }
+        }
+      }
+
+      if (questionText.has(11) && questionText.has(12)) {
+        // Apply the standard distribution: third set of questions (usually 11-13) at 5 marks each
+        for (let q = 11; q <= 13; q++) {
+          if (questionText.has(q)) {
+            questionMarks.set(q, 5);
+          }
+        }
+      }
+    }
+
+    // Log the results
+    console.log(
+      `Extracted ${questionMarks.size} questions with marks and ${questionText.size} with text`
+    );
+
+    return { marks: questionMarks, questionText: questionText };
+  }
+
+  /**
+   * Process an uploaded image with GPT-4 Vision
    */
   async processImageUpload(userId: string, imagePath: string): Promise<string> {
     const session = this.getOrCreateSession(userId);
@@ -948,7 +1156,7 @@ ${result.suggested_points.map((s) => `- ${s}`).join("\n")}
   }
 
   /**
-   * Process an image from URL with OCR and GPT-4 Vision - with conversational flow
+   * Process an image from URL with GPT-4 Vision
    */
   async processImageFromUrl(userId: string, imageUrl: string): Promise<string> {
     const session = this.getOrCreateSession(userId);
@@ -978,290 +1186,3 @@ ${result.suggested_points.map((s) => `- ${s}`).join("\n")}
     }
   }
 }
-
-  /**
-   * Extract questions and their marks from OCR text
-   * Retained from the original implementation but updated to
-   * return a more structured result
-   */
-  private extractQuestionMarks(
-    ocrText: string,
-    subjectArea: SubjectArea | null
-  ): { marks: Map<number, number>; questionText: Map<number, string> } {
-    console.log("Extracting question marks from OCR text");
-    const questionMarks = new Map<number, number>();
-    const questionText = new Map<number, string>();
-    const lines = ocrText.split("\n");
-
-    // Implementation from the existing code...
-    // This is a large method that's retained from your original code
-    // I've omitted it here for brevity, but you would keep your existing
-    // implementation with any improvements you've made.
-    
-    // Find total marks in header
-        let totalMarksInHeader = 0;
-    const mmPattern = /MM:\s*(\d+)|Maximum\s+Marks\s*:?\s*(\d+)|MM\s*(\d+)|Total\s+Marks\s*:?\s*(\d+)/i;
-    for (let i = 0; i < Math.min(15, lines.length); i++) {
-      const mmMatch = lines[i].match(mmPattern);
-      if (mmMatch) {
-        totalMarksInHeader = parseInt(
-          mmMatch[1] || mmMatch[2] || mmMatch[3] || mmMatch[4],
-          10
-        );
-        console.log(`Total marks found in header: ${totalMarksInHeader}`);
-        break;
-      }
-    }
-
-    // Look for the QUESTIONS and MARKS headers to identify the table structure
-    let questionsColumnIndex = -1;
-    let marksColumnIndex = -1;
-    let startLineIndex = -1;
-
-    for (let i = 0; i < Math.min(40, lines.length); i++) {
-      const line = lines[i].trim().toUpperCase();
-      if (line.includes("QUESTIONS") && line.includes("MARKS")) {
-        questionsColumnIndex = line.indexOf("QUESTIONS");
-        marksColumnIndex = line.indexOf("MARKS");
-        startLineIndex = i + 1; // Start from the next line
-        console.log(
-          `Found table headers at line ${i}: QUESTIONS at ${questionsColumnIndex}, MARKS at ${marksColumnIndex}`
-        );
-        break;
-      }
-    }
-
-    // If we found a table structure, process it
-    if (
-      startLineIndex > 0 &&
-      questionsColumnIndex >= 0 &&
-      marksColumnIndex >= 0
-    ) {
-      let currentQuestionNumber = 0;
-      let currentQuestionText = "";
-
-      for (let i = startLineIndex; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (line.length === 0) continue;
-
-        // Check if line starts with a question number
-        const qNumMatch = line.match(/^(\d+)\s/);
-        if (qNumMatch) {
-          // If we had a previous question, save it before starting a new one
-          if (currentQuestionNumber > 0 && currentQuestionText) {
-            questionText.set(currentQuestionNumber, currentQuestionText.trim());
-          }
-
-          // Start a new question
-          currentQuestionNumber = parseInt(qNumMatch[1], 10);
-          currentQuestionText = line.substring(qNumMatch[0].length).trim();
-
-          // Extract marks if they're at the end of the line
-          if (marksColumnIndex > 0 && line.length > marksColumnIndex) {
-            const marksSection = line.substring(marksColumnIndex).trim();
-            const marksMatch = marksSection.match(/^(\d+)/);
-            if (marksMatch) {
-              const marks = parseInt(marksMatch[1], 10);
-              questionMarks.set(currentQuestionNumber, marks);
-              console.log(
-                `Found question ${currentQuestionNumber} with ${marks} marks: ${currentQuestionText.substring(
-                  0,
-                  50
-                )}...`
-              );
-            }
-          }
-        } else if (currentQuestionNumber > 0) {
-          // Continuation of the current question text
-          currentQuestionText += " " + line;
-
-          // Check if this continuation line contains the marks
-          if (
-            !questionMarks.has(currentQuestionNumber) &&
-            marksColumnIndex > 0 &&
-            line.length > marksColumnIndex
-          ) {
-            const marksSection = line.substring(marksColumnIndex).trim();
-            const marksMatch = marksSection.match(/^(\d+)/);
-            if (marksMatch) {
-              const marks = parseInt(marksMatch[1], 10);
-              questionMarks.set(currentQuestionNumber, marks);
-            }
-          }
-        }
-      }
-
-      // Save the last question if there is one
-      if (currentQuestionNumber > 0 && currentQuestionText) {
-        questionText.set(currentQuestionNumber, currentQuestionText.trim());
-      }
-    }
-
-    // If we couldn't extract using the table structure, try a different approach
-    if (questionMarks.size === 0) {
-      console.log(
-        "No marks found in table format, trying alternative extraction"
-      );
-
-      let currentQuestionNumber = 0;
-      let currentQuestionText = "";
-      let inQuestion = false;
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (line.length === 0) continue;
-
-        // Look for lines that start with a question number
-        const qNumMatch = line.match(/^(\d+)[\.\s]/);
-        if (qNumMatch) {
-          // If we were processing a previous question, save it
-          if (inQuestion && currentQuestionNumber > 0) {
-            questionText.set(currentQuestionNumber, currentQuestionText.trim());
-          }
-
-          // Start a new question
-          currentQuestionNumber = parseInt(qNumMatch[1], 10);
-          currentQuestionText = line.substring(qNumMatch[0].length).trim();
-          inQuestion = true;
-
-          // Look for marks at the end of the question line
-          const marksMatch = line.match(/(\d+)\s*marks?$/i);
-          if (marksMatch) {
-            const marks = parseInt(marksMatch[1], 10);
-            if (marks > 0 && marks <= 10) {
-              questionMarks.set(currentQuestionNumber, marks);
-              console.log(
-                `Found question ${currentQuestionNumber} with ${marks} marks at end of line`
-              );
-            }
-          } else {
-            // Look for a standalone number at the very end that might be marks
-            const endNumMatch = line.match(/\s+(\d+)$/);
-            if (endNumMatch) {
-              const possibleMarks = parseInt(endNumMatch[1], 10);
-              if (possibleMarks > 0 && possibleMarks <= 10) {
-                questionMarks.set(currentQuestionNumber, possibleMarks);
-                console.log(
-                  `Found probable marks ${possibleMarks} for question ${currentQuestionNumber}`
-                );
-              }
-            }
-          }
-        } else if (inQuestion) {
-          // Continuation of current question
-          currentQuestionText += " " + line;
-
-          // If we haven't found marks yet, check this line
-          if (!questionMarks.has(currentQuestionNumber)) {
-            const marksMatch = line.match(/(\d+)\s*marks?$/i);
-            if (marksMatch) {
-              const marks = parseInt(marksMatch[1], 10);
-              questionMarks.set(currentQuestionNumber, marks);
-            }
-          }
-        }
-      }
-
-      // Save the last question if there is one
-      if (inQuestion && currentQuestionNumber > 0) {
-        questionText.set(currentQuestionNumber, currentQuestionText.trim());
-      }
-    }
-
-    // Special case for Economics papers with structured format
-    if (
-      subjectArea === SubjectArea.ECONOMICS &&
-      totalMarksInHeader === 40 &&
-      questionMarks.size === 0
-    ) {
-      console.log("Applying special case for CBSE Economics paper");
-
-      let found2MarksSection = false;
-      let found3MarksSection = false;
-      let found5MarksSection = false;
-
-      // Try to find marker lines for each section
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].toLowerCase();
-        if (
-          line.includes("2 marks questions") ||
-          line.includes("questions of 2 marks")
-        ) {
-          found2MarksSection = true;
-        } else if (
-          line.includes("3 marks questions") ||
-          line.includes("questions of 3 marks")
-        ) {
-          found3MarksSection = true;
-        } else if (
-          line.includes("5 marks questions") ||
-          line.includes("questions of 5 marks")
-        ) {
-          found5MarksSection = true;
-        }
-      }
-
-      // If we identified the standard format
-      if (found2MarksSection || found3MarksSection || found5MarksSection) {
-        // Extract questions by question number and assign marks based on format
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i].trim();
-          const qNumMatch = line.match(/^(\d+)[\.\s]/);
-
-          if (qNumMatch) {
-            const qNum = parseInt(qNumMatch[1], 10);
-
-            // Extract question text (from after the number to end of line)
-            let qText = line.substring(qNumMatch[0].length).trim();
-
-            // Gather additional text for multi-line questions
-            let j = i + 1;
-            while (j < lines.length) {
-              const nextLine = lines[j].trim();
-              // Stop if we hit another question or an empty line
-              if (nextLine.match(/^(\d+)[\.\s]/) || nextLine.length === 0) {
-                break;
-              }
-              qText += " " + nextLine;
-              j++;
-            }
-
-            // Store the question text
-            questionText.set(qNum, qText);
-
-            // Assign marks based on question number in standard format
-            if (qNum >= 1 && qNum <= 5) {
-              questionMarks.set(qNum, 2); // First 5 questions: 2 marks each
-            } else if (qNum >= 6 && qNum <= 10) {
-              questionMarks.set(qNum, 3); // Next 5 questions: 3 marks each
-            } else if (qNum >= 11 && qNum <= 13) {
-              questionMarks.set(qNum, 5); // Last 3 questions: 5 marks each
-            }
-          }
-        }
-      }
-    }
-
-    // If we specifically have the first page with questions 1-5, and know they're 2 marks each from the paper info
-    if (
-      questionText.size > 0 &&
-      Array.from(questionText.keys()).every((qNum) => qNum >= 1 && qNum <= 5) &&
-      questionMarks.size === 0
-    ) {
-      console.log(
-        "First page with questions 1-5 detected, applying 2 marks each"
-      );
-
-      for (let qNum = 1; qNum <= 5; qNum++) {
-        if (questionText.has(qNum)) {
-          questionMarks.set(qNum, 2);
-        }
-      }
-    }
-
-    // Log the results
-    console.log(
-      `Extracted ${questionMarks.size} questions with marks and ${questionText.size} with text`
-    );
-
-    return { marks: questionMarks, questionText: questionText };
