@@ -627,14 +627,46 @@ Pay special attention to:
 
       if (session.subjectArea === SubjectArea.ECONOMICS) {
         subjectSpecificInstructions = `
-For Economics, follow these CBSE guidelines:
-- Award full marks for complete explanations of economic concepts
-- Award partial marks for partial understanding
-- Check for correct diagrams when required
-- Look for proper economic terminology usage
-- Evaluate application of economic theories to real-world scenarios
-- Consider logical structure and flow of the answer
-`;
+        For Economics, follow these CBSE guidelines:
+        - Award full marks for complete explanations of economic concepts
+        - Award partial marks for partial understanding
+        - Check for correct diagrams when required
+        - Look for proper economic terminology usage
+        - Evaluate application of economic theories to real-world scenarios
+        - Consider logical structure and flow of the answer
+        - Reward proper use of economic data and statistical information
+        - Assess ability to analyze economic policies and their impacts
+        - Consider understanding of both microeconomic and macroeconomic principles
+        - Evaluate comprehension of Indian economic development and challenges
+        `;
+      } else if (session.subjectArea === SubjectArea.ACCOUNTANCY) {
+        subjectSpecificInstructions = `
+        For Accountancy, follow these CBSE guidelines:
+        - Award full marks for correct numerical calculations and procedures
+        - Award marks for proper accounting formats and presentations
+        - Check for accurate application of accounting principles
+        - Look for proper use of accounting terminology
+        - Evaluate understanding of double-entry bookkeeping system
+        - Consider precision in financial statement preparation
+        - Assess understanding of accounting standards and conventions
+        - Check for proper journal entries, ledger posting, and trial balance
+        - Evaluate ability to analyze financial statements
+        - Consider comprehension of partnership accounts, company accounts, and not-for-profit organization accounts
+        `;
+      } else if (session.subjectArea === SubjectArea.BUSINESS_STUDIES) {
+        subjectSpecificInstructions = `
+        For Business Studies, follow these CBSE guidelines:
+        - Award full marks for thorough explanation of business concepts
+        - Award marks for relevant examples from business world
+        - Check for understanding of management principles and functions
+        - Look for proper business terminology usage
+        - Evaluate application of theoretical frameworks to business cases
+        - Consider organization and structure of the answer
+        - Assess knowledge of business environment and its components
+        - Check understanding of marketing, finance, and human resource concepts
+        - Evaluate comprehension of entrepreneurship development
+        - Consider understanding of consumer protection and business ethics
+        `;
       }
 
       // Grade the student's answer
@@ -830,16 +862,52 @@ Respond conversationally while including this assessment.`
       // Add economics-specific feedback if applicable
       if (session.subjectArea === SubjectArea.ECONOMICS) {
         formattedResponse += `
-  📊 **ECONOMICS-SPECIFIC FEEDBACK:**
-  - Economic Concepts: ${result.conceptsScore || "Not explicitly evaluated"}/10
-  - Diagram Accuracy: ${result.diagramScore || "Not explicitly evaluated"}/10
-  - Application of Theories: ${
-    result.applicationScore || "Not explicitly evaluated"
-  }/10
-  - Use of Terminology: ${
-    result.terminologyScore || "Not explicitly evaluated"
-  }/10
-  `;
+      📊 **ECONOMICS-SPECIFIC FEEDBACK:**
+      - Economic Concepts: ${
+        result.conceptsScore || "Not explicitly evaluated"
+      }/10
+      - Diagram Accuracy: ${
+        result.diagramScore || "Not explicitly evaluated"
+      }/10
+      - Application of Theories: ${
+        result.applicationScore || "Not explicitly evaluated"
+      }/10
+      - Use of Terminology: ${
+        result.terminologyScore || "Not explicitly evaluated"
+      }/10
+      `;
+      } else if (session.subjectArea === SubjectArea.ACCOUNTANCY) {
+        formattedResponse += `
+      📒 **ACCOUNTANCY-SPECIFIC FEEDBACK:**
+      - Accounting Principles: ${
+        result.conceptsScore || "Not explicitly evaluated"
+      }/10
+      - Numerical Accuracy: ${
+        result.diagramScore || "Not explicitly evaluated"
+      }/10
+      - Format & Presentation: ${
+        result.applicationScore || "Not explicitly evaluated"
+      }/10
+      - Financial Terminology: ${
+        result.terminologyScore || "Not explicitly evaluated"
+      }/10
+      `;
+      } else if (session.subjectArea === SubjectArea.BUSINESS_STUDIES) {
+        formattedResponse += `
+      💼 **BUSINESS STUDIES-SPECIFIC FEEDBACK:**
+      - Management Concepts: ${
+        result.conceptsScore || "Not explicitly evaluated"
+      }/10
+      - Case Application: ${
+        result.diagramScore || "Not explicitly evaluated"
+      }/10
+      - Business Examples: ${
+        result.applicationScore || "Not explicitly evaluated"
+      }/10
+      - Business Terminology: ${
+        result.terminologyScore || "Not explicitly evaluated"
+      }/10
+      `;
       }
     }
 
@@ -870,6 +938,7 @@ Respond conversationally while including this assessment.`
     );
 
     // Generate subject-specific feedback
+    // Generate subject-specific feedback
     let subjectSpecificStrengths: string[] = [];
     let subjectSpecificAreas: string[] = [];
 
@@ -882,6 +951,26 @@ Respond conversationally while including this assessment.`
       subjectSpecificAreas = [
         "Could develop economic terminology more precisely",
         "Economic diagrams would benefit from clearer labeling",
+      ];
+    } else if (subjectArea === SubjectArea.ACCOUNTANCY) {
+      subjectSpecificStrengths = [
+        "Demonstrates basic understanding of accounting principles",
+        "Shows an attempt at proper accounting formats",
+      ];
+
+      subjectSpecificAreas = [
+        "Numerical procedures could be more clearly presented",
+        "Financial statement formats need more precision",
+      ];
+    } else if (subjectArea === SubjectArea.BUSINESS_STUDIES) {
+      subjectSpecificStrengths = [
+        "Shows familiarity with business management concepts",
+        "Attempts to relate theory to business scenarios",
+      ];
+
+      subjectSpecificAreas = [
+        "Could use more specific business examples",
+        "Management principles could be applied more effectively",
       ];
     } else if (subjectArea === SubjectArea.MATH) {
       subjectSpecificStrengths = [
