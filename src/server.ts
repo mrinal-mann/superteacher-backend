@@ -7,18 +7,14 @@ import { CbseChatService } from "./services/cbseChatService";
 dotenv.config();
 
 // Set port
-const PORT = process.env.PORT || 3000;
 
 // Register the CBSE chat service
 console.log("Initializing CBSE Grading Assistant...");
 
 // Create an instance of the CBSE chat service
-const cbseChatService = new CbseChatService();
-
-// Register the service globally
+export const cbseChatService = new CbseChatService();
 (global as any).chatService = cbseChatService;
 console.log("CBSE Grading Assistant initialized successfully");
-
 // Start the server
 app.listen(3000, () => {
   console.log(`CBSE Grading Assistant server is running on port ${3000}`);

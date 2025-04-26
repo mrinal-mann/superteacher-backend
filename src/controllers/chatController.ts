@@ -3,9 +3,8 @@ import { IncomingForm } from "formidable";
 import { v4 as uuidv4 } from "uuid";
 import fs from "fs";
 import path from "path";
-import { chatService } from "../services/chatService";
 import { storageService } from "../services/storageService";
-
+import { cbseChatService as chatService } from "../server";
 // Configure formidable options - use /tmp for Render compatibility
 const uploadDir =
   process.env.NODE_ENV === "production"
