@@ -421,41 +421,21 @@ Your response should feel like a natural conversation with a knowledgeable colle
     imageUrl: string
   ): Promise<string> {
     const session = this.getOrCreateSession(userId);
-    console.log(`Processing student answer from URL for user ${userId}`);
 
-    // Ensure we have question paper and marks first
-    if (
-      !session.questionPaper ||
-      !session.questionMarks ||
-      !session.isMarkingConfirmed
-    ) {
-      return await this.generateConversationalResponse(
-        userId,
-        "I've uploaded a student answer",
-        "The user has uploaded a student answer, but we don't have the question paper or confirmed marks yet. Gently remind them that we need to complete those steps first."
-      );
-    }
     // Update session state
     sessionStore.updateSession(userId, {
       originalImage: imageUrl,
-      step: ConversationStep.GRADING_IN_PROGRESS,
+      step: ConversationStep.PROCESSING_QUESTION_PAPER,
     });
 
     // Use GPT-4 Vision to extract and analyze the question paper
     const analysisPrompt = `
-You are analyzing a student's handwritten answer to a CBSE ${session.subjectArea} exam.
-Extract all text from this student's answer exactly as it appears, preserving formatting as much as possible.
-
-Pay special attention to:
-1. Carefully read the handwritten text, even if it's difficult to decipher
-2. Maintain the original structure and organization of the answer
-3. Any diagrams or figures (describe them briefly where they appear)
-4. Mathematical formulas or equations (if present)
-5. Numbered points or sections in the answer
-6. Pay close attention to technical terminology related to ${session.subjectArea}
-
-If parts of the text are unclear, indicate this with [unclear] rather than guessing.
-`;
+  You are analyzing a CBSE question paper.
+  1. Extract all text exactly as it appears.
+  2. Identify all questions and their marks.
+  3. Pay special attention to the question numbers and marks allocated to each question.
+  4. Look for any text marked "MM" or "Maximum Marks" to find the total marks.
+  `;
 
     try {
       // Extract text and analyze it in one step
@@ -490,10 +470,13 @@ Return ONLY valid JSON without explanation.
 `;
 
       const structuredData = await openaiService.generateText(structurePrompt);
-
+      let cleanedData = structuredData;
+      if (cleanedData.includes("```json")) {
+        cleanedData = cleanedData.replace(/```json\s*|\s*```/g, "");
+      }
       try {
         // Parse the structured data
-        const parsedData = JSON.parse(structuredData);
+        const parsedData = JSON.parse(cleanedData);
 
         // Convert to question marks map
         const questionMarks = new Map<number, number>();
@@ -696,7 +679,6 @@ Ensure your response is ONLY valid JSON without any additional text.
         gradingPrompt,
         0.2
       );
-
       // Clean up JSON if it's wrapped in markdown code blocks
       if (gradingResponseText.includes("```json")) {
         gradingResponseText = gradingResponseText.replace(
@@ -1167,12 +1149,17 @@ Respond conversationally while including this assessment.`
     // Handle image based on current session state in CBSE flow
     switch (session.step) {
       case ConversationStep.WAITING_FOR_QUESTION_PAPER:
+        console.log("Directing to processQuestionPaperUrl");
         return this.processQuestionPaperUrl(userId, imageUrl);
 
       case ConversationStep.WAITING_FOR_STUDENT_ANSWER:
+        console.log("Directing to processStudentAnswerUrl");
         return this.processStudentAnswerUrl(userId, imageUrl);
 
       default:
+        console.log(
+          `Unexpected session state for image upload: ${session.step}`
+        );
         // If not in expected state, guide user conversationally
         sessionStore.updateSession(userId, {
           step: ConversationStep.WAITING_FOR_CLASS,
